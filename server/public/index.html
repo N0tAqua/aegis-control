@@ -433,6 +433,24 @@
         </div>
       </section>
 
+      <section class="card" id="keys-card" hidden style="margin-bottom: 16px">
+        <div class="card-head">
+          <h2>Licence keys</h2>
+          <span class="spacer"></span>
+          <span class="muted" id="keys-count">—</span>
+        </div>
+        <p class="hint" style="margin: 0 0 12px">
+          Give someone a key and they can register with it in the desktop app or right here — the
+          website does not need the app installed.
+        </p>
+        <div class="field">
+          <input id="key-label" maxlength="60" placeholder="Label — who the key is for" />
+          <button class="btn primary small" id="create-key" type="button">Create key</button>
+        </div>
+        <div class="field" id="key-scopes" style="flex-wrap: wrap; gap: 6px; margin-bottom: 12px"></div>
+        <div id="key-list"><div class="hint">No keys yet.</div></div>
+      </section>
+
       <div class="grid">
         <section class="card">
           <div class="card-head">
@@ -599,6 +617,111 @@
           : 'Optional. Linking checks your Discord ID against the key assigned by the owner.';
         els('dashboard-link-discord').hidden = linked;
         els('dashboard-unlink-discord').hidden = !linked;
+
+        const scopes = account.role === 'owner' ? KEY_SCOPES.map(([scope]) => scope) : account.scopes || [];
+        canManageKeys = scopes.includes('manageKeys');
+        els('keys-card').hidden = !canManageKeys;
+        if (canManageKeys) renderScopeBoxes(scopes);
+      }
+
+      const KEY_SCOPES = [
+        ['manageBot', 'Bot'],
+        ['manageRules', 'Rules'],
+        ['useConsole', 'Console'],
+        ['viewLogs', 'Logs'],
+        ['manageKeys', 'Keys'],
+        ['manageRooms', 'Rooms'],
+      ];
+      const DEFAULT_KEY_SCOPES = ['manageBot', 'manageRules', 'useConsole', 'viewLogs'];
+      let canManageKeys = false;
+      let keyCache = [];
+
+      function renderScopeBoxes(grantable) {
+        els('key-scopes').replaceChildren(
+          ...KEY_SCOPES.map(([scope, label]) => {
+            const wrap = document.createElement('label');
+            wrap.className = 'chip';
+            const box = document.createElement('input');
+            box.type = 'checkbox';
+            box.value = scope;
+            box.checked = DEFAULT_KEY_SCOPES.includes(scope);
+            box.disabled = !grantable.includes(scope);
+            wrap.append(box, document.createTextNode(` ${label}`));
+            return wrap;
+          }),
+        );
+      }
+
+      function selectedScopes() {
+        return [...els('key-scopes').querySelectorAll('input:checked')].map((box) => box.value);
+      }
+
+      function renderKeys(keys) {
+        keyCache = keys;
+        els('keys-count').textContent = keys.length
+          ? `${keys.length} key${keys.length === 1 ? '' : 's'}`
+          : '';
+        els('key-list').innerHTML = keys.length
+          ? keys
+              .map((key) => {
+                const state = key.disabled ? 'disabled' : 'active';
+                const device = key.bound ? `locked to ${key.boundMachine}` : 'not used yet';
+                const used = key.usedBy ? ` · ${escapeHtml(key.usedBy)}` : '';
+                return `<div class="server-row">
+                  <div>
+                    <span class="mono">${escapeHtml(key.key)}</span>
+                    <div class="meta">${escapeHtml(key.label || 'No label')} · ${state} · ${escapeHtml(device)}${used}${key.role === 'owner' ? ' · owner' : ''}</div>
+                  </div>
+                  <div class="meta" style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                    <button class="btn small" type="button" data-key="${escapeHtml(key.id)}" data-act="copy">Copy</button>
+                    <button class="btn small" type="button" data-key="${escapeHtml(key.id)}" data-act="toggle">${key.disabled ? 'Enable' : 'Disable'}</button>
+                    ${key.bound ? `<button class="btn small" type="button" data-key="${escapeHtml(key.id)}" data-act="reset">Reset device</button>` : ''}
+                    <button class="btn small danger" type="button" data-key="${escapeHtml(key.id)}" data-act="delete">Delete</button>
+                  </div>
+                </div>`;
+              })
+              .join('')
+          : '<div class="hint">No keys yet. Create one and share it.</div>';
+      }
+
+      async function loadKeys() {
+        if (!canManageKeys) return;
+        try {
+          const data = await call('/keys');
+          renderKeys(Array.isArray(data.keys) ? data.keys : []);
+        } catch (error) {
+          els('key-list').innerHTML = `<div class="hint">${escapeHtml(error.message)}</div>`;
+        }
+      }
+
+      async function keyAction(id, act) {
+        const key = keyCache.find((item) => item.id === id);
+        if (!key) return;
+        try {
+          if (act === 'copy') {
+            await navigator.clipboard.writeText(key.key);
+            toast('Key copied.');
+            return;
+          }
+          if (act === 'delete') {
+            if (!confirm(`Delete ${key.key}? Anyone using it loses access.`)) return;
+            await call(`/keys/${encodeURIComponent(id)}`, { method: 'DELETE' });
+            toast('Key deleted.');
+          } else if (act === 'reset') {
+            if (!confirm('Reset the device lock on this key? It can then be used on another machine.')) return;
+            await call(`/keys/${encodeURIComponent(id)}`, { method: 'PATCH', body: { resetHwid: true } });
+            toast('Device lock cleared.');
+          } else if (act === 'toggle') {
+            await call(`/keys/${encodeURIComponent(id)}`, {
+              method: 'PATCH',
+              body: { disabled: !key.disabled },
+            });
+            toast(key.disabled ? 'Key enabled.' : 'Key disabled.');
+          }
+          await loadKeys();
+        } catch (error) {
+          toast(error.message, 'err');
+        }
       }
 
       async function loadDiscordRedirect() {
@@ -622,6 +745,7 @@
         els('gate').hidden = true;
         els('shell').hidden = false;
         loadDiscordRedirect();
+        loadKeys();
         return true;
       }
 
@@ -966,6 +1090,26 @@
           toast(error.message, 'err');
         }
       });
+      els('create-key').addEventListener('click', async () => {
+        const label = els('key-label').value.trim();
+        try {
+          const data = await call('/keys', {
+            method: 'POST',
+            body: { label, scopes: selectedScopes() },
+          });
+          els('key-label').value = '';
+          renderKeys(Array.isArray(data.keys) ? data.keys : []);
+          toast('Key created — copy it and share it.');
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+      els('key-list').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-act]');
+        if (!button) return;
+        keyAction(button.dataset.key, button.dataset.act);
+      });
+
       els('copy-host-token').addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(els('host-token').textContent);

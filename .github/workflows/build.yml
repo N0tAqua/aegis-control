@@ -8,6 +8,15 @@ name: Build and publish the Windows app
 on:
   push:
     branches: [main]
+    paths:
+      - 'electron/**'
+      - 'src/**'
+      - 'renderer/**'
+      - 'assets/**'
+      - 'build/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/build.yml'
   workflow_dispatch:
 
 permissions:
