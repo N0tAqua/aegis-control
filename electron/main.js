@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AuthStore, machineId } from './auth.js';
+import { SERVER_FILE } from './config.js';
 import { BotManager } from '../src/bot.js';
 import { checkForUpdate, downloadUpdate, installUpdate, isNewer } from './updater.js';
 
@@ -450,6 +451,18 @@ function registerIpc(authStore) {
     return status;
   });
   ipcMain.handle('auth:lock', () => authStore.lock());
+  ipcMain.handle('auth:set-server', async (_event, rawUrl) => {
+    const value = String(rawUrl ?? '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\/[^\s]+$/i.test(value)) {
+      throw new Error('Enter the server address, for example http://your-host:14651');
+    }
+    await mkdir(path.dirname(SERVER_FILE), { recursive: true });
+    await writeFile(SERVER_FILE, `${value}\n`, 'utf8');
+    // Take effect immediately: the store keeps the address it was created with.
+    authStore.apiUrl = value;
+    authStore.offline = false;
+    return authStore.getStatus();
+  });
   ipcMain.handle('auth:logout', async () => {
     const status = await authStore.logout();
     activeRoom = null;

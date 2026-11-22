@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('aegis', {
     login: (payload) => ipcRenderer.invoke('auth:login', payload),
     autoLogin: () => ipcRenderer.invoke('auth:auto-login'),
     lock: () => ipcRenderer.invoke('auth:lock'),
+    setServer: (url) => ipcRenderer.invoke('auth:set-server', url),
     logout: () => ipcRenderer.invoke('auth:logout'),
     createDashboardToken: (label) => ipcRenderer.invoke('auth:dashboard-token', label),
     startDiscordLogin: () => ipcRenderer.invoke('auth:discord-start'),

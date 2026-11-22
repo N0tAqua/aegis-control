@@ -134,7 +134,16 @@ function clearAuthError() {
 function renderAuth(authState) {
   clearAuthError();
   $('auth-machine').textContent = authState.machine ?? '—';
-  $('auth-server').textContent = authState.server ?? '—';
+  $('auth-server').textContent = authState.server ?? 'not set';
+
+  // No baked-in address (an old build, or a portable copy on a new PC): ask for
+  // it here instead of showing an error the user cannot act on.
+  const serverField = $('server-url');
+  if (serverField && authState.server && !serverField.value) serverField.value = authState.server;
+  if (!authState.server) {
+    $('auth-server-edit').hidden = false;
+    $('toggle-server').hidden = true;
+  }
 
   const firstRun = Boolean(authState.firstRun);
   const registering = state.authView === 'register';
@@ -2104,6 +2113,41 @@ $('go-register').addEventListener('click', () => {
 $('go-login').addEventListener('click', () => {
   state.authView = 'login';
   renderAuth(state.auth ?? {});
+});
+
+$('toggle-server').addEventListener('click', () => {
+  const box = $('auth-server-edit');
+  box.hidden = !box.hidden;
+  if (!box.hidden) {
+    $('server-url').value = state.auth?.server ?? '';
+    $('server-url').focus();
+  }
+});
+
+async function saveServer() {
+  const value = $('server-url').value.trim();
+  if (!value) {
+    showAuthError('Enter your server address, for example http://your-host:14651');
+    return;
+  }
+  try {
+    const status = await api.auth.setServer(value);
+    state.auth = status;
+    $('auth-server-edit').hidden = true;
+    $('toggle-server').hidden = false;
+    renderAuth(status);
+    toast('Server address saved.');
+  } catch (error) {
+    showAuthError(error?.message || 'That server address could not be saved.');
+  }
+}
+
+$('save-server').addEventListener('click', saveServer);
+$('server-url').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    saveServer();
+  }
 });
 
 $('login-form').addEventListener('submit', async (event) => {

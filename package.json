@@ -1,6 +1,6 @@
 {
   "name": "aegis-control",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "private": true,
   "type": "module",
   "description": "Aegis Control: a desktop dashboard for the Aegis Discord protection bot",
@@ -36,6 +36,7 @@
       "src/**/*",
       "renderer/**/*",
       "assets/icon.png",
+      "assets/build.json",
       "package.json"
     ],
     "extraMetadata": {

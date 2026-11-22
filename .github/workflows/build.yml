@@ -43,6 +43,16 @@ jobs:
       - name: Check
         run: npm run check
 
+      - name: Bake the server address
+        shell: bash
+        env:
+          SERVER_URL: ${{ vars.AEGIS_API_URL }}
+        run: |
+          URL="$SERVER_URL"
+          if [ -z "$URL" ]; then URL="https://aegisfisher.wispbyte.app"; fi
+          printf '{\n  "apiUrl": "%s"\n}\n' "$URL" > assets/build.json
+          cat assets/build.json
+
       - name: Build the portable app
         run: npm run dist
 

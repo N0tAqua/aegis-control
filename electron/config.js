@@ -11,6 +11,7 @@
 import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /** Where the address lives when it is not in the environment. */
 export const SERVER_FILE = path.join(
@@ -32,7 +33,23 @@ function savedApiUrl() {
   return '';
 }
 
-export const API_URL = String(process.env.AEGIS_API_URL || savedApiUrl())
+/* A build can carry the address of the server it was made for, so somebody who
+ * downloads the app only has to install it. The build writes assets/build.json;
+ * a saved address or AEGIS_API_URL still wins, and the login screen can change
+ * it without a rebuild. */
+function builtApiUrl() {
+  try {
+    const file = fileURLToPath(new URL('../assets/build.json', import.meta.url));
+    const parsed = JSON.parse(readFileSync(file, 'utf8'));
+    return String(parsed?.apiUrl ?? '').trim();
+  } catch {
+    return '';
+  }
+}
+
+export const API_URL = String(
+  process.env.AEGIS_API_URL || savedApiUrl() || builtApiUrl(),
+)
   .trim()
   .replace(/\/+$/, '');
 

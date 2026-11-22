@@ -102,7 +102,17 @@
 
         <p class="auth-error" id="auth-error" hidden></p>
         <p class="auth-machine mono">Device <span id="auth-machine">—</span></p>
-        <p class="auth-machine mono">Server <span id="auth-server">—</span></p>
+        <p class="auth-machine mono">
+          Server <span id="auth-server">—</span>
+          <button class="link" id="toggle-server" type="button">change</button>
+        </p>
+        <div class="auth-form" id="auth-server-edit" hidden>
+          <label>
+            Server address
+            <input id="server-url" spellcheck="false" placeholder="http://your-host:14651" />
+          </label>
+          <button class="btn btn-ghost wide" id="save-server" type="button">Use this server</button>
+        </div>
       </div>
     </div>
 
