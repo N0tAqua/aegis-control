@@ -25,9 +25,13 @@ function arg(name, fallback) {
   return index >= 0 && process.argv[index + 1] ? process.argv[index + 1] : fallback;
 }
 
-const api = String(
-  arg('api', process.env.AEGIS_API_URL || 'https://aegis-license-server-6z1s1v.freebuff.site'),
-).replace(/\/+$/, '');
+const api = String(arg('api', process.env.AEGIS_API_URL || ''))
+  .trim()
+  .replace(/\/+$/, '');
+if (!api) {
+  console.error('Set the server address: --api http://host:port, or AEGIS_API_URL.');
+  process.exit(1);
+}
 const version = arg('version', pkg.version);
 const notes = arg('notes', '');
 const file = path.resolve(root, arg('file', 'dist/Aegis-Control.exe'));

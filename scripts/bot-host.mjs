@@ -5,7 +5,7 @@
  * Keeps the Discord bot online on a machine that stays on (VPS, spare PC, free
  * container) and obeys start/stop commands from the web dashboard.
  *
- *   DISCORD_TOKEN=... AEGIS_HOST_TOKEN=... npm run host
+ *   DISCORD_TOKEN=... AEGIS_HOST_TOKEN=... AEGIS_SERVER=http://your-host:14651 npm run host
  *
  * Create the host token in the panel (Settings -> Dashboard access, owner) or
  * on the website dashboard under "Host runner".
@@ -20,9 +20,9 @@ import { BotManager } from '../src/bot.js';
 const root = path.resolve(import.meta.dirname, '..');
 const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 
-const SERVER = String(
-  process.env.AEGIS_SERVER || 'https://aegis-license-server-6z1s1v.freebuff.site',
-).replace(/\/+$/, '');
+const SERVER = String(process.env.AEGIS_SERVER || '')
+  .trim()
+  .replace(/\/+$/, '');
 const HOST_TOKEN = String(process.env.AEGIS_HOST_TOKEN || '').trim();
 const DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || '').trim();
 const NODE_NAME = String(process.env.AEGIS_NODE_NAME || os.hostname()).slice(0, 60);
@@ -44,6 +44,14 @@ if (!HOST_TOKEN) {
     '\nAEGIS_HOST_TOKEN is missing.\n' +
       'Create a host runner token in the Aegis dashboard (Host runner card), then start again:\n' +
       '  DISCORD_TOKEN=<bot token> AEGIS_HOST_TOKEN=<host token> npm run host\n',
+  );
+  process.exit(1);
+}
+
+if (!SERVER) {
+  console.error(
+    '\nAEGIS_SERVER is missing. Point the runner at your dashboard, for example:\n' +
+      '  DISCORD_TOKEN=<bot token> AEGIS_HOST_TOKEN=<host token> AEGIS_SERVER=http://your-host:14651 npm run host\n',
   );
   process.exit(1);
 }

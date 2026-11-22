@@ -25,6 +25,7 @@ export function isNewer(candidate, current) {
 }
 
 export async function checkForUpdate(currentVersion, apiUrl = API_URL) {
+  if (!apiUrl) return null;
   const response = await fetch(`${apiUrl}/api/releases/latest`, {
     headers: { 'cache-control': 'no-store' },
   });

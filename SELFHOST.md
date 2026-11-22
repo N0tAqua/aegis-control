@@ -64,7 +64,8 @@ a fresh database, so create a new owner account and new licence keys here.
 
 The web dashboard already does everything. For the app, set `AEGIS_API_URL` to
 `http://your-address:port` before launching, or save the same URL in
-`%APPDATA%\aegis-control\api-url.txt`.
+`%APPDATA%\aegis-control\api-url.txt`. The app has no fallback address, so until
+one is set it tells you where to put it and calls nothing.
 
 ## What is stored where
 

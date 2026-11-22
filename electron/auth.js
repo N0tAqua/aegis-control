@@ -3,7 +3,7 @@ import { createHash, randomBytes, scryptSync } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { API_URL } from './config.js';
+import { API_URL, API_URL_HELP } from './config.js';
 
 /** Panel permissions that can be attached to a key (and its account). */
 export const SCOPES = ['manageBot', 'manageRules', 'useConsole', 'viewLogs', 'manageKeys', 'manageRooms', 'linkConsole'];
@@ -88,6 +88,13 @@ export class AuthStore {
   }
 
   async request(pathname, { method = 'GET', body, token = this.token, timeout = 20000 } = {}) {
+    if (!this.apiUrl) {
+      const error = new Error(API_URL_HELP);
+      error.status = 0;
+      error.code = 'NO_SERVER';
+      throw error;
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeout);
     const headers = { 'x-aegis-hwid': this.machineId };
@@ -161,6 +168,12 @@ export class AuthStore {
 
   async getStatus() {
     this.offline = false;
+    if (!this.apiUrl) {
+      // Nothing to ask: no address means the app shows the setup hint instead.
+      this.offline = true;
+      return this.getStatusPayload({ firstRun: false });
+    }
+
     let setup = { firstRun: this.setup.firstRun, ownerKey: null };
 
     try {

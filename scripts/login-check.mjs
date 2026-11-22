@@ -4,7 +4,7 @@
  * report what the server recorded if it fails.
  *
  *   npm run login-check
- *   npm run login-check -- --username aqua --api https://…-preview.freebuff.site
+ *   npm run login-check -- --username aqua --api http://your-host:14651
  *
  * Credentials come from AEGIS_LOGIN_USERNAME / AEGIS_LOGIN_PASSWORD or from the
  * prompt. The password is never printed, logged or sent anywhere except the
@@ -75,9 +75,13 @@ function tokenKind(token) {
   return 'session row';
 }
 
-const api = String(
-  arg('api', process.env.AEGIS_API_URL || 'https://aegis-license-server-6z1s1v.freebuff.site'),
-).replace(/\/+$/, '');
+const api = String(arg('api', process.env.AEGIS_API_URL || ''))
+  .trim()
+  .replace(/\/+$/, '');
+if (!api) {
+  console.error('Set the server address: --api http://host:port, or AEGIS_API_URL.');
+  process.exit(1);
+}
 const hwid = machineId();
 let username = process.env.AEGIS_LOGIN_USERNAME || arg('username');
 let password = process.env.AEGIS_LOGIN_PASSWORD || '';

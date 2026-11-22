@@ -30,6 +30,7 @@ npm start        # run the Electron app
 npm run dist     # build the portable .exe into dist/
 ```
 
-The app talks to `https://aegis-license-server-6z1s1v.freebuff.site` unless
-`AEGIS_API_URL` is set (or `%APPDATA%\aegis-control\api-url.txt` holds a URL),
-which is how it is pointed at a self-hosted server.
+The app has no built-in server address. Set `AEGIS_API_URL`, or save the address
+(for example `http://your-host:14651`) in `%APPDATA%\aegis-control\api-url.txt`,
+and it uses that. Without one it says so and calls nothing, so it can never fall
+back to an old or unrelated server.
