@@ -42,16 +42,30 @@ inventing a merge commit, and `--omit=dev` stops the panel installing Electron.
 | `DISCORD_TOKEN` | your bot token |
 | `ADMIN_TOKEN` | any long random string |
 | `NODE_ENV` | `production` (stops the panel installing Electron, which this server never uses) |
-| `AEGIS_ALWAYS_RUN` | `1` |
 
 `PORT` is required — the container reaches your app on that exact port.
 `ADMIN_TOKEN` only seeds the session secret; it is not a login.
 
-Optional once the dashboard works: create a host token under **Host runner**,
-then add `AEGIS_HOST_TOKEN=<token>` and restart. That switches the bot to the
-runner, which adds in-dashboard start/stop.
+## 4. Start and stop the bot without stopping the server
 
-## 4. Sign in
+The bot runs under a host runner on this same machine, so **Start** and **Stop**
+in the dashboard and the app control only the bot: the API, the dashboard and
+the website stay up. That is set up automatically — on a fresh install the
+server creates the runner token itself, tells you in the log
+(`host : runner token created, so dashboard start/stop works`) and starts the
+bot online. Nothing to copy and nothing to run on your PC.
+
+| Variable | Effect |
+| --- | --- |
+| `AEGIS_HOST_RUNNER=0` | do not run the bot on this host at all |
+| `AEGIS_HOST_TOKEN` | pin the runner token instead of the generated one |
+| `AEGIS_ALWAYS_RUN=1` | the bot ignores Stop and stays up (crashes already restart it) |
+
+If a token was already created in the dashboard, the server leaves it alone —
+that token may belong to a runner on another machine. Set `AEGIS_HOST_TOKEN` to
+that value instead if you want the runner here.
+
+## 5. Sign in
 
 Open the Address in a browser (or add a subdomain under **Subdomains**). The
 first visit shows the **owner key** — register the owner account with it. Then
@@ -60,7 +74,7 @@ create licence keys for your users as usual.
 Existing accounts and keys on the old hosted site do **not** move across: this is
 a fresh database, so create a new owner account and new licence keys here.
 
-## 5. Point the desktop app at it (optional)
+## 6. Point the desktop app at it (optional)
 
 The web dashboard already does everything. For the app, set `AEGIS_API_URL` to
 `http://your-address:port` before launching, or save the same URL in
