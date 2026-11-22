@@ -1,0 +1,605 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data: https://cdn.discordapp.com; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aegis Control</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="panel.css" />
+    <link rel="stylesheet" href="theme.css" />
+  </head>
+  <body>
+    <div class="auth" id="auth-screen" hidden>
+      <div class="auth-card">
+        <div class="auth-head">
+          <div class="brand-mark big">
+            <img src="aegis.png" alt="Aegis" />
+          </div>
+          <div>
+            <div class="auth-title">AEGIS CONTROL</div>
+            <div class="auth-sub">Panel access</div>
+          </div>
+        </div>
+
+        <section id="auth-firstrun" hidden>
+          <h2>First-time setup</h2>
+          <p class="muted small">
+            Your Aegis server generated an <b>owner key</b>. It creates the account that manages licence
+            keys and every setting, so store it somewhere safe.
+          </p>
+          <div class="keybox">
+            <code id="owner-key">—</code>
+            <button class="btn btn-ghost btn-small" id="copy-owner-key" type="button">Copy</button>
+          </div>
+          <button class="btn btn-primary wide" id="firstrun-continue" type="button">
+            Create the owner account
+          </button>
+          <p class="hint">Single use. The account is locked to the first computer that signs in.</p>
+        </section>
+
+        <section id="auth-login" hidden>
+          <h2>Sign in</h2>
+          <button class="btn btn-discord wide" id="discord-login" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.7a18 18 0 0 1 4.3 1.4C15.6 3.6 12.4 3.6 8.6 5.1 10 4.5 11.4 4.1 12.9 3.8L12.6 3a19.8 19.8 0 0 0-4.9 1.4C4.4 9.2 3.5 14 3.9 18.6a20 20 0 0 0 6 3l.8-1.2a13 13 0 0 1-2.1-1l.5-.4a14.3 14.3 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l.8 1.2a20 20 0 0 0 6-3c.5-5.3-.9-10-3.2-14.2ZM9.5 15.9c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm5 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+            Sign in with Discord
+          </button>
+          <div class="auth-divider" id="auth-divider"><span>or use a panel account</span></div>
+          <form id="login-form" class="auth-form">
+            <label>
+              Username
+              <input id="login-username" autocomplete="username" required />
+            </label>
+            <label>
+              Password
+              <input id="login-password" type="password" autocomplete="current-password" required />
+            </label>
+            <button class="btn btn-primary wide" type="submit">Log in</button>
+          </form>
+          <button class="btn btn-ghost wide" id="auto-login" type="button" hidden>
+            Auto login as <b id="auto-user"></b>
+          </button>
+          <p class="hint">
+            No account yet?
+            <button class="link" id="go-register" type="button">Create one with a key</button>
+          </p>
+        </section>
+
+        <section id="auth-register" hidden>
+          <h2>Create account</h2>
+          <p class="muted small">
+            You need a licence key from the owner. Accounts live on the Aegis server and are locked
+            to the first computer that signs in.
+          </p>
+          <form id="register-form" class="auth-form">
+            <label>
+              Username
+              <input id="reg-username" autocomplete="username" required />
+            </label>
+            <label>
+              Password
+              <input
+                id="reg-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                required
+              />
+            </label>
+            <label>
+              Licence key
+              <input id="reg-key" autocomplete="off" spellcheck="false" required />
+            </label>
+            <button class="btn btn-primary wide" type="submit">Create account</button>
+          </form>
+          <p class="hint">
+            <button class="link" id="go-login" type="button">Back to sign in</button>
+          </p>
+        </section>
+
+        <p class="auth-error" id="auth-error" hidden></p>
+        <p class="auth-machine mono">Device <span id="auth-machine">—</span></p>
+        <p class="auth-machine mono">Server <span id="auth-server">—</span></p>
+      </div>
+    </div>
+
+    <div class="update-overlay" id="update-overlay" hidden>
+      <div class="update-panel">
+        <div class="update-spinner"></div>
+        <h2 id="update-overlay-title">Updating Aegis…</h2>
+        <p class="muted small" id="update-overlay-note">Downloading the new version.</p>
+        <div class="update-progress"><div class="update-progress-bar" id="update-progress-bar"></div></div>
+        <div class="muted small" id="update-progress-label">0%</div>
+      </div>
+    </div>
+
+    <div class="update-banner" id="update-banner" hidden>
+      <div class="update-text">
+        <strong id="update-title">Update available</strong>
+        <span class="muted small" id="update-note"></span>
+      </div>
+      <div class="update-actions">
+        <button class="btn btn-primary btn-small" id="update-install" hidden>Restart &amp; update</button>
+        <button class="btn btn-ghost btn-small" id="update-dismiss">Later</button>
+      </div>
+    </div>
+
+    <div class="app locked">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark">
+            <img src="aegis.png" alt="Aegis" />
+          </div>
+          <div>
+            <div class="brand-name">AEGIS</div>
+            <div class="brand-sub">Discord control</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <button class="nav-item active" data-goto="overview">
+            <span class="nav-icon">◈</span> Overview
+          </button>
+          <button class="nav-item" data-goto="servers">
+            <span class="nav-icon">▤</span> Servers
+          </button>
+          <button class="nav-item" data-goto="access">
+            <span class="nav-icon">✓</span> Access
+          </button>
+          <button class="nav-item" data-goto="console">
+            <span class="nav-icon">›_</span> Console
+          </button>
+          <button class="nav-item" data-goto="activity">
+            <span class="nav-icon">≡</span> Activity
+          </button>
+          <button class="nav-item" data-goto="messages">
+            <span class="nav-icon">✉</span> Messages
+          </button>
+          <button class="nav-item" data-goto="licenses" id="licenses-nav" hidden>
+            <span class="nav-icon">⌘</span> Licences
+          </button>
+          <button class="nav-item" data-goto="room" id="room-nav">
+            <span class="nav-icon">⌂</span> Room
+          </button>
+          <button class="nav-item" data-goto="settings">
+            <span class="nav-icon">⚙</span> Settings
+          </button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <div class="status-line">
+            <span class="dot" id="side-dot"></span>
+            <span id="side-status">Offline</span>
+          </div>
+          <div class="version" id="side-version">Aegis Control</div>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <h1 id="page-title">Overview</h1>
+            <p class="sub" id="page-sub">Live status of Aegis and your servers.</p>
+          </div>
+          <div class="topbar-actions">
+            <span class="pill" id="token-pill">No token</span>
+            <button class="btn btn-primary" id="top-start">Start Aegis</button>
+          </div>
+        </header>
+
+        <div class="content">
+          <section class="page active" data-page="overview">
+            <div class="linked-banner" id="linked-banner" hidden>
+              <span class="linked-dot"></span>
+              <div class="linked-text">
+                <strong>Linked console</strong>
+                <span class="muted small" id="linked-note">Waiting for the host panel…</span>
+              </div>
+            </div>
+
+            <article class="hero card">
+              <div class="hero-main">
+                <div class="orb" id="hero-orb"></div>
+                <div class="hero-text">
+                  <div class="hero-status" id="hero-status">Aegis is offline</div>
+                  <div class="hero-tag" id="hero-tag">Add your bot token in Settings, then start Aegis.</div>
+                </div>
+              </div>
+              <div class="hero-actions">
+                <button class="btn btn-primary" id="hero-start">Start</button>
+                <button class="btn btn-ghost" id="hero-stop">Stop</button>
+                <button class="btn btn-ghost" id="hero-deploy">Register commands</button>
+                <button class="btn btn-ghost" id="hero-invite" hidden>Invite link</button>
+              </div>
+              <div class="hero-error" id="hero-error" hidden></div>
+            </article>
+
+            <div class="stats">
+              <div class="stat card">
+                <span class="stat-label">Servers</span>
+                <strong id="stat-servers">0</strong>
+                <span class="stat-note">Aegis is installed in</span>
+              </div>
+              <div class="stat card">
+                <span class="stat-label">Rules active</span>
+                <strong id="stat-protections">0</strong>
+                <span class="stat-note">switches and force rules</span>
+              </div>
+              <div class="stat card">
+                <span class="stat-label">Allowlisted</span>
+                <strong id="stat-allowed">0</strong>
+                <span class="stat-note">users who may control it</span>
+              </div>
+              <div class="stat card">
+                <span class="stat-label">Uptime</span>
+                <strong id="stat-uptime">—</strong>
+                <span class="stat-note">current session</span>
+              </div>
+            </div>
+
+            <div class="grid-2">
+              <article class="card">
+                <div class="card-head">
+                  <h2>Quick controls</h2>
+                  <button class="link" data-goto="servers">All servers</button>
+                </div>
+                <div id="quick-controls" class="quick-controls"></div>
+              </article>
+              <article class="card">
+                <div class="card-head">
+                  <h2>Recent activity</h2>
+                  <button class="link" data-goto="activity">View all</button>
+                </div>
+                <ul id="activity-preview" class="feed"></ul>
+              </article>
+            </div>
+          </section>
+
+          <section class="page" data-page="servers">
+            <div class="card">
+              <div class="card-head">
+                <h2>Protected servers</h2>
+                <span class="muted" id="servers-count"></span>
+              </div>
+              <p class="muted small">
+                Server switches cover everyone; a <b>Members</b> rule overrides them for one person.
+                <b>Force</b> keeps a member server-muted/deafened and re-applies it if it is removed.
+                Aegis needs <b>Mute Members</b>, <b>Deafen Members</b> and (for role commands)
+                <b>Manage Roles</b>, with its role above the members and roles it manages.
+              </p>
+              <div id="server-list" class="server-list"></div>
+            </div>
+          </section>
+
+          <section class="page" data-page="access">
+            <div class="card">
+              <div class="card-head">
+                <h2>Who can control Aegis</h2>
+                <span class="muted" id="access-count"></span>
+              </div>
+              <p class="muted small">
+                With an empty list, anyone with <b>Manage Server</b> can run the bot commands. Add a
+                Discord user ID and only those users can — they do not need admin permissions.
+              </p>
+              <form class="inline-form" id="allow-form">
+                <input
+                  id="allow-input"
+                  placeholder="Discord user ID (17–20 digits)"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button class="btn btn-primary" type="submit">Add user</button>
+              </form>
+              <div class="empty" id="allow-empty">
+                No one is on the list yet. Server managers keep access.
+              </div>
+              <div class="allow-list" id="allow-list"></div>
+            </div>
+          </section>
+
+          <section class="page" data-page="console">
+            <article class="card console-card">
+              <div class="card-head">
+                <h2>Command console</h2>
+                <span class="muted">runs locally against Aegis</span>
+              </div>
+              <div class="console-out" id="console-out"></div>
+              <form class="console-form" id="console-form">
+                <span class="prompt">aegis ›</span>
+                <input
+                  id="console-input"
+                  placeholder="help"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+              </form>
+              <div class="chips">
+                <button class="chip" data-cmd="help">help</button>
+                <button class="chip" data-cmd="status">status</button>
+                <button class="chip" data-cmd="guilds">guilds</button>
+                <button class="chip" data-cmd="members">members</button>
+              </div>
+            </article>
+          </section>
+
+          <section class="page" data-page="activity">
+            <div class="card">
+              <div class="card-head">
+                <h2>Activity</h2>
+                <button class="link" id="clear-activity">Clear view</button>
+              </div>
+              <ul id="activity-list" class="feed tall"></ul>
+            </div>
+
+            <div class="card" id="crash-card" hidden>
+              <div class="card-head">
+                <h2>Crash history</h2>
+                <span class="muted small" id="crash-count"></span>
+              </div>
+              <p class="muted small">
+                Owner only. When Aegis stops unexpectedly the reason and stack are kept here, and
+                the bot restarts by itself.
+              </p>
+              <ul id="crash-list" class="feed tall"></ul>
+            </div>
+          </section>
+
+          <section class="page" data-page="licenses">
+            <article class="card form-card">
+              <div class="card-head">
+                <h2>Licence keys</h2>
+                <span class="muted" id="keys-count"></span>
+              </div>
+              <p class="muted small">
+                Assign a key to a Discord ID and that person signs in with Discord — their account is
+                created automatically. Leave the Discord ID empty for a normal key that binds to the
+                first computer that registers it. Deleting a key does not delete its account.
+              </p>
+              <form class="key-create" id="key-form">
+                <div class="field">
+                  <input
+                    id="key-label"
+                    placeholder="Label, e.g. Sam's laptop"
+                    maxlength="40"
+                    autocomplete="off"
+                  />
+                  <input
+                    id="key-discord"
+                    placeholder="Discord user ID (optional)"
+                    maxlength="20"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    spellcheck="false"
+                  />
+                  <button class="btn btn-primary" type="submit">Create key</button>
+                </div>
+                <div class="scope-picker" id="key-scopes"></div>
+                <div class="chips">
+                  <button class="chip" type="button" data-preset="full">Full access</button>
+                  <button class="chip" type="button" data-preset="operator">Operator</button>
+                  <button class="chip" type="button" data-preset="viewer">Viewer</button>
+                  <button class="chip" type="button" data-preset="linked">Linked viewer</button>
+                  <button class="chip" type="button" data-preset="rooms">Room host</button>
+                </div>
+              </form>
+              <div class="key-list" id="key-list"></div>
+              <div class="empty" id="keys-empty" hidden>No keys yet.</div>
+            </article>
+          </section>
+
+          <section class="page" data-page="room">
+            <article class="card form-card" id="room-none">
+              <div class="card-head">
+                <h2>Rooms</h2>
+                <span class="muted" id="room-status"></span>
+              </div>
+              <p class="muted small">
+                Aegis works inside a room. Create one to run your own bot, or join a friend's room
+                with their code — everyone in a room sees the host's console live.
+              </p>
+              <form class="inline-form" id="room-create-form" hidden>
+                <input id="room-name" placeholder="Room name, e.g. Aqua HQ" maxlength="40" autocomplete="off" />
+                <button class="btn btn-primary" type="submit">Create room</button>
+              </form>
+              <form class="inline-form" id="room-join-form">
+                <input id="room-code" placeholder="Room code (6 characters)" maxlength="10" autocomplete="off" spellcheck="false" />
+                <button class="btn btn-ghost" type="submit">Join with code</button>
+              </form>
+              <div class="room-available" id="room-open-list"></div>
+              <div class="room-available" id="room-available"></div>
+            </article>
+
+            <article class="card form-card" id="room-active" hidden>
+              <div class="card-head">
+                <h2 id="room-name-title">Room</h2>
+                <span class="badge" id="room-role-badge">host</span>
+              </div>
+              <p class="muted small" id="room-meta"></p>
+              <div class="keybox" id="room-code-box" hidden>
+                <code id="room-code-value">—</code>
+                <button class="btn btn-ghost btn-small" id="copy-room-code" type="button">Copy code</button>
+              </div>
+              <p class="muted small" id="room-note"></p>
+              <div class="room-members" id="room-members"></div>
+              <div class="room-available" id="room-switch-list"></div>
+              <div class="field">
+                <button class="btn btn-ghost" id="leave-room">Leave room</button>
+                <button class="btn btn-ghost" id="delete-room" hidden>Delete room</button>
+              </div>
+            </article>
+
+            <article class="card form-card" id="social-card">
+              <div class="card-head">
+                <h2>Friends &amp; invites</h2>
+                <span class="badge" id="my-public-id">—</span>
+              </div>
+              <p class="muted small">
+                This is your app ID. Share it so people can add you, or use theirs to invite them into your room.
+              </p>
+              <div class="field">
+                <button class="btn btn-ghost btn-small" id="copy-public-id" type="button">Copy my ID</button>
+              </div>
+              <form class="inline-form" id="friend-add-form">
+                <input id="friend-id" placeholder="Friend's ID, e.g. A7K2Q9" maxlength="12" autocomplete="off" spellcheck="false" />
+                <button class="btn btn-ghost" type="submit">Add friend</button>
+              </form>
+              <form class="inline-form" id="room-invite-form">
+                <input id="invite-id" placeholder="ID to invite into your room" maxlength="12" autocomplete="off" spellcheck="false" />
+                <button class="btn btn-ghost" type="submit">Invite to room</button>
+              </form>
+              <div id="friend-list" class="social-list"></div>
+              <div id="social-requests" class="social-list"></div>
+            </article>
+          </section>
+
+          <section class="page" data-page="messages">
+            <div class="messages-layout">
+              <aside class="card message-channels">
+                <div class="card-head">
+                  <h2>Channels</h2>
+                  <span class="muted" id="message-count"></span>
+                </div>
+                <div id="message-channels" class="channel-list"></div>
+              </aside>
+              <article class="card messages-panel">
+                <div class="card-head">
+                  <h2 id="message-title">All messages</h2>
+                  <span class="muted small" id="message-channel-note"></span>
+                </div>
+                <div class="access-warning" id="message-intent-warning" hidden>
+                  Discord is hiding message text. Enable <b>Message Content Intent</b> in the Discord
+                  Developer Portal under Bot → Privileged Gateway Intents, save, then restart Aegis.
+                </div>
+                <div id="message-list" class="message-list"></div>
+              </article>
+            </div>
+          </section>
+
+          <section class="page" data-page="settings">
+            <article class="card form-card">
+              <div class="card-head"><h2>Account</h2></div>
+              <p class="muted small">
+                Signed in as <b id="account-name">—</b> (<span id="account-role">—</span>). Accounts and
+                keys are stored on your Aegis server and locked to the first computer that signs in.
+              </p>
+              <p class="muted small" id="account-discord-line" hidden></p>
+              <p class="muted small" id="account-key-line" hidden></p>
+              <div class="field">
+                <button class="btn btn-discord" id="link-discord-account" type="button">Link Discord</button>
+                <button class="btn btn-ghost" id="unlink-discord-account" type="button" hidden>Unlink Discord</button>
+              </div>
+              <p class="muted small mono" id="discord-redirect-line" hidden></p>
+              <p class="muted small" id="linked-state" hidden></p>
+              <div class="field">
+                <button class="btn btn-ghost" id="lock-btn">Lock panel</button>
+                <button class="btn btn-ghost" id="logout-btn">Log out</button>
+              </div>
+            </article>
+
+            <article class="card form-card" id="share-card">
+              <div class="card-head"><h2>Share the panel</h2></div>
+              <p class="muted small">
+                Share your download link instead of the file — friends get the latest build without a
+                100 MB attachment. Create them a key on the Licences page: accounts and keys live on
+                your Aegis server, so a key works on any computer and is locked to the first one that
+                registers it.
+              </p>
+              <div class="field">
+                <button class="btn btn-primary" id="copy-download-link">Copy download link</button>
+                <button class="btn btn-ghost" id="open-download-page">Open download page</button>
+                <button class="btn btn-ghost" id="show-app-file">Open app folder</button>
+              </div>
+            </article>
+
+            <article class="card form-card" id="dashboard-card">
+              <div class="card-head"><h2>Dashboard access</h2></div>
+              <p class="muted small">
+                Open your controls in a browser. The website dashboard can start and stop the bot from
+                anywhere; a token signs in as your account and keeps exactly your permissions, so people
+                without the Manage bot permission never see the start or stop buttons.
+              </p>
+              <div class="field">
+                <button class="btn btn-primary" id="new-dashboard-token">Create dashboard token</button>
+                <button class="btn btn-ghost" id="open-dashboard">Open web dashboard</button>
+              </div>
+              <p class="muted small" id="dashboard-identity">Sign in with Discord on the dashboard.</p>
+              <div class="keybox" id="dashboard-token-box" hidden>
+                <code id="dashboard-token-value">—</code>
+                <button class="btn btn-ghost btn-small" id="copy-dashboard-token" type="button">Copy</button>
+              </div>
+              <p class="muted small">
+                For 24/7 uptime run the bot on a host runner (a VPS, spare PC or free container) instead
+                of this computer: <code>npm run host</code> with your bot token and the host token.
+              </p>
+            </article>
+
+            <article class="card form-card" id="token-card">
+              <div class="card-head"><h2>Bot token</h2></div>
+              <p class="muted small">
+                Create an application at discord.com/developers, open <b>Bot</b> and reset the token.
+                It is stored on this computer only.
+              </p>
+              <div class="field">
+                <input id="token-input" type="password" placeholder="Paste a new bot token" autocomplete="off" />
+                <button class="btn btn-primary" id="save-token">Save token</button>
+              </div>
+              <div class="hint" id="token-state">No token saved.</div>
+            </article>
+
+            <article class="card form-card" id="commands-card">
+              <div class="card-head"><h2>Slash commands</h2></div>
+              <p class="muted small">
+                Registering globally can take up to an hour. Put your server ID here to make the
+                commands appear instantly.
+              </p>
+              <div class="field">
+                <input id="guild-input" placeholder="Server ID (optional)" autocomplete="off" />
+                <button class="btn btn-ghost" id="save-guild">Save</button>
+                <button class="btn btn-primary" id="deploy-btn">Register commands</button>
+              </div>
+            </article>
+
+            <article class="card form-card" id="startup-card">
+              <div class="card-head"><h2>Startup</h2></div>
+              <label class="check">
+                <input type="checkbox" id="autostart-input" />
+                Start Aegis automatically after you sign in
+              </label>
+            </article>
+
+            <article class="card form-card" id="update-card">
+              <div class="card-head"><h2>Updates</h2></div>
+              <p class="muted small" id="update-state">Aegis checks your server for updates when it starts.</p>
+              <div class="field">
+                <button class="btn btn-ghost" id="check-updates">Check for updates</button>
+              </div>
+            </article>
+
+            <article class="card form-card">
+              <div class="card-head"><h2>About</h2></div>
+              <dl class="about">
+                <dt>Version</dt>
+                <dd id="about-version">—</dd>
+                <dt>Server</dt>
+                <dd id="about-server" class="mono">—</dd>
+                <dt>Data folder</dt>
+                <dd id="about-data" class="mono">—</dd>
+                <dt>Device ID</dt>
+                <dd id="about-device" class="mono">—</dd>
+                <dt>Token storage</dt>
+                <dd id="about-encrypted">—</dd>
+              </dl>
+            </article>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <div id="toasts" class="toasts"></div>
+    <div id="social-popups" class="social-popups"></div>
+    <script src="app.js" defer></script>
+  </body>
+</html>

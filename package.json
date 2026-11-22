@@ -1,0 +1,64 @@
+{
+  "name": "aegis-control",
+  "version": "1.6.3",
+  "private": true,
+  "type": "module",
+  "description": "Aegis Control: a desktop dashboard for the Aegis Discord protection bot",
+  "main": "electron/main.js",
+  "author": "Aegis",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "bot": "node src/index.js",
+    "host": "node scripts/bot-host.mjs",
+    "selfhost": "node scripts/selfhost.mjs",
+    "deploy": "node src/deploy-commands.js",
+    "dist": "electron-builder --win portable",
+    "release": "node scripts/publish-release.mjs",
+    "login-check": "node scripts/login-check.mjs",
+    "check": "node --check index.js && node --check electron/main.js && node --check electron/auth.js && node --check electron/updater.js && node --check electron/config.js && node --check src/bot.js && node --check src/index.js && node --check src/commands.js && node --check src/deploy-commands.js && node --check renderer/app.js && node --check server/worker.js && node --check scripts/publish-release.mjs && node --check scripts/bot-host.mjs && node --check scripts/login-check.mjs && node --check scripts/selfhost.mjs && node --check server/node/server.mjs && node --check server/node/sqlite-d1.mjs && node --check server/node/files-r2.mjs && node --check server/node/assets.mjs && node --check src/features/store.js && node --check src/features/util.js && node --check src/features/logging.js && node --check src/features/reaction-roles.js && node --check src/features/tickets.js && node --check src/features/embeds.js && node --check src/features/giveaways.js && node --check src/features/temp-voice.js && node --check src/features/backup.js && node --check src/features/staff.js && node --check src/features/intel.js && node --check src/features/matchmaking.js && node --check src/features/ai.js && node --check src/features/index.js && node --check src/features/commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  },
+  "build": {
+    "appId": "com.aegis.control",
+    "productName": "Aegis Control",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "src/**/*",
+      "renderer/**/*",
+      "assets/icon.png",
+      "package.json"
+    ],
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
+    "asar": true,
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "Aegis-Control.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  }
+}

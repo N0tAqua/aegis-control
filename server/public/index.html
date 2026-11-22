@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aegis Control</title>
+    <style>
+      :root {
+        --bg: #060910;
+        --panel: rgba(15, 22, 38, 0.78);
+        --panel-2: rgba(21, 30, 50, 0.72);
+        --line: rgba(126, 156, 214, 0.16);
+        --line-2: rgba(126, 156, 214, 0.3);
+        --text: #eaf0ff;
+        --muted: #8fa1c4;
+        --muted-2: #66789c;
+        --accent: #3ce8b3;
+        --blue: #6f9bff;
+        --danger: #ff6482;
+        --warn: #ffc861;
+        --radius: 18px;
+      }
+
+      * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
+
+      html, body { min-height: 100%; }
+
+      body {
+        margin: 0;
+        color: var(--text);
+        font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+        background:
+          radial-gradient(1100px 620px at 82% -12%, rgba(60, 232, 179, 0.13), transparent 62%),
+          radial-gradient(900px 560px at 2% 4%, rgba(111, 155, 255, 0.16), transparent 64%),
+          linear-gradient(165deg, #060910 0%, #070c18 52%, #05080f 100%);
+        background-attachment: fixed;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      a { color: #9dbcff; }
+
+      /* ---------------------------------------------------------- sign in --- */
+
+      .gate {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 28px;
+      }
+
+      .gate-card {
+        width: min(460px, 100%);
+        padding: 32px;
+        border-radius: 22px;
+        border: 1px solid var(--line);
+        background: linear-gradient(165deg, rgba(18, 26, 44, 0.95), rgba(9, 14, 26, 0.94));
+        box-shadow: 0 40px 100px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+        backdrop-filter: blur(18px);
+      }
+
+      .mark {
+        width: 50px;
+        height: 50px;
+        border-radius: 15px;
+        display: grid;
+        place-items: center;
+        background: linear-gradient(150deg, rgba(60, 232, 179, 0.22), rgba(111, 155, 255, 0.2));
+        border: 1px solid rgba(60, 232, 179, 0.34);
+        box-shadow: 0 0 26px rgba(60, 232, 179, 0.2);
+        margin-bottom: 18px;
+      }
+
+      .mark svg { width: 26px; height: 26px; fill: var(--accent); }
+
+      .gate-card h1 {
+        margin: 0 0 6px;
+        font-size: 22px;
+        letter-spacing: -0.02em;
+      }
+
+      .gate-card p { margin: 0 0 18px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+
+      label { display: block; font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 7px; }
+
+      input {
+        width: 100%;
+        padding: 12px 14px;
+        border-radius: 11px;
+        border: 1px solid var(--line-2);
+        background: rgba(6, 10, 19, 0.85);
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        outline: none;
+        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+      }
+
+      input:focus-visible { border-color: rgba(60, 232, 179, 0.55); box-shadow: 0 0 0 3px rgba(60, 232, 179, 0.14); }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 11px 18px;
+        border-radius: 11px;
+        border: 1px solid var(--line-2);
+        background: rgba(255, 255, 255, 0.04);
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: transform 0.14s ease, filter 0.14s ease, border-color 0.14s ease, background 0.14s ease;
+      }
+
+      .btn:hover { border-color: rgba(60, 232, 179, 0.42); background: rgba(60, 232, 179, 0.08); }
+      .btn:active { transform: translateY(1px); }
+      .btn:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+
+      .btn.primary {
+        border-color: transparent;
+        background: linear-gradient(180deg, #3ce8b3, #17b98c);
+        color: #04231b;
+      }
+
+      .btn.primary:hover { filter: brightness(1.07); }
+
+      .btn.danger {
+        border-color: rgba(255, 100, 130, 0.4);
+        background: rgba(255, 100, 130, 0.12);
+        color: #ffc0cc;
+      }
+
+      .btn.wide { width: 100%; margin-top: 6px; }
+      .btn.small { padding: 8px 12px; font-size: 12px; }
+
+      .hint { color: var(--muted-2); font-size: 12px; line-height: 1.6; }
+
+      .error {
+        margin-top: 14px;
+        padding: 10px 12px;
+        border-radius: 10px;
+        font-size: 12.5px;
+        border: 1px solid rgba(255, 100, 130, 0.35);
+        background: rgba(255, 100, 130, 0.1);
+        color: #ffb8c5;
+      }
+
+      /* ---------------------------------------------------------- dashboard --- */
+
+      .shell { max-width: 1180px; margin: 0 auto; padding: 26px 26px 60px; }
+      .shell[hidden] { display: none; }
+
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 22px;
+        flex-wrap: wrap;
+      }
+
+      .brand { display: flex; align-items: center; gap: 12px; }
+      .brand .mark { width: 42px; height: 42px; margin: 0; border-radius: 13px; }
+      .brand .mark svg { width: 22px; height: 22px; }
+      .brand-name { font-size: 13px; font-weight: 700; letter-spacing: 0.2em; }
+      .brand-sub { font-size: 11.5px; color: var(--muted-2); }
+
+      .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 12px;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.03);
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .chip.mono { font-family: "Cascadia Mono", Consolas, ui-monospace, monospace; letter-spacing: 0.04em; }
+
+      .card {
+        border-radius: var(--radius);
+        border: 1px solid var(--line);
+        background: linear-gradient(165deg, rgba(17, 25, 42, 0.86), rgba(10, 15, 27, 0.82));
+        box-shadow: 0 22px 60px rgba(0, 0, 0, 0.38), inset 0 1px 0 rgba(255, 255, 255, 0.035);
+        backdrop-filter: blur(16px);
+        padding: 22px;
+      }
+
+      .card-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 14px;
+      }
+
+      .card-head h2 { margin: 0; font-size: 14px; letter-spacing: 0.01em; }
+      .card-head .spacer { margin-left: auto; }
+      .card-head .muted { font-size: 11.5px; color: var(--muted-2); }
+
+      .hero { display: flex; flex-direction: column; gap: 20px; margin-bottom: 18px; }
+
+      .hero-top { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+
+      .orb {
+        position: relative;
+        width: 54px;
+        height: 54px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: radial-gradient(circle at 35% 30%, #44506b, #1a2236);
+        box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+        transition: background 0.25s ease, box-shadow 0.25s ease;
+      }
+
+      .orb.on {
+        background: radial-gradient(circle at 35% 30%, #6cffd4, #17b98c);
+        box-shadow: 0 0 0 6px rgba(60, 232, 179, 0.12), 0 0 30px rgba(60, 232, 179, 0.45);
+      }
+
+      .orb.waiting {
+        background: radial-gradient(circle at 35% 30%, #ffe2a6, #d8a233);
+        box-shadow: 0 0 0 6px rgba(255, 200, 97, 0.1), 0 0 26px rgba(255, 200, 97, 0.3);
+      }
+
+      .hero-status { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+      .hero-note { margin-top: 4px; font-size: 13px; color: var(--muted); line-height: 1.55; }
+
+      .hero-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+      .notice {
+        padding: 11px 14px;
+        border-radius: 12px;
+        font-size: 12.5px;
+        line-height: 1.55;
+        border: 1px solid rgba(255, 200, 97, 0.28);
+        background: rgba(255, 200, 97, 0.08);
+        color: #ffdfa6;
+      }
+
+      .notice.info { border-color: rgba(111, 155, 255, 0.3); background: rgba(111, 155, 255, 0.09); color: #cbdcff; }
+      .notice.bad { border-color: rgba(255, 100, 130, 0.32); background: rgba(255, 100, 130, 0.09); color: #ffc0cc; }
+
+      .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; }
+
+      .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+
+      .stat {
+        padding: 14px 15px;
+        border-radius: 13px;
+        border: 1px solid var(--line);
+        background: rgba(8, 13, 24, 0.6);
+      }
+
+      .stat-label { display: block; font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 7px; }
+      .stat strong { font-size: 19px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+      .stat small { display: block; margin-top: 4px; font-size: 11.5px; color: var(--muted-2); }
+
+      .kv { display: flex; justify-content: space-between; gap: 14px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 12.5px; }
+      .kv:last-child { border-bottom: 0; }
+      .kv span:first-child { color: var(--muted-2); }
+      .kv span:last-child { text-align: right; color: var(--text); }
+
+      .dot { width: 8px; height: 8px; border-radius: 50%; background: #4a5878; box-shadow: 0 0 0 3px rgba(74, 88, 120, 0.16); }
+      .dot.online { background: var(--accent); box-shadow: 0 0 0 3px rgba(60, 232, 179, 0.18), 0 0 12px rgba(60, 232, 179, 0.5); }
+      .dot.offline { background: var(--danger); box-shadow: 0 0 0 3px rgba(255, 100, 130, 0.16); }
+
+      .log-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        max-height: 300px;
+        overflow: auto;
+        font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+        font-size: 11.5px;
+        line-height: 1.55;
+      }
+
+      .log-line { display: flex; gap: 9px; padding: 5px 8px; border-radius: 7px; background: rgba(8, 13, 24, 0.55); }
+      .log-time { color: var(--muted-2); flex-shrink: 0; }
+      .log-msg { color: #cfdcff; overflow-wrap: anywhere; }
+      .log-line.warn .log-msg { color: var(--warn); }
+      .log-line.error .log-msg { color: #ff9fb0; }
+
+      .server-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+      .server-row:last-child { border-bottom: 0; }
+      .server-row .meta { font-size: 11.5px; color: var(--muted-2); }
+
+      .setup-code {
+        display: block;
+        margin: 10px 0;
+        padding: 13px 14px;
+        border-radius: 11px;
+        border: 1px dashed rgba(60, 232, 179, 0.35);
+        background: rgba(4, 8, 15, 0.8);
+        color: #9ff5d8;
+        font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+        font-size: 11.5px;
+        line-height: 1.75;
+        white-space: pre-wrap;
+        word-break: break-all;
+      }
+
+      .toast-wrap { position: fixed; right: 20px; bottom: 20px; z-index: 90; display: flex; flex-direction: column; gap: 9px; }
+      .toast {
+        padding: 12px 15px;
+        border-radius: 12px;
+        border: 1px solid rgba(111, 155, 255, 0.35);
+        background: linear-gradient(160deg, #131f36, #0b1322);
+        box-shadow: 0 18px 45px rgba(0, 0, 0, 0.5);
+        font-size: 12.5px;
+        animation: toast-in 180ms ease-out;
+      }
+      .toast.err { border-color: rgba(255, 100, 130, 0.4); color: #ffc3ce; }
+
+      @keyframes toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+      ::-webkit-scrollbar { width: 10px; height: 10px; }
+      ::-webkit-scrollbar-thumb { background: rgba(120, 150, 200, 0.22); border-radius: 999px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+
+      .discord-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        width: 100%;
+        padding: 12px 16px;
+        border: 0;
+        border-radius: 11px;
+        background: #5865f2;
+        color: #fff;
+        font: inherit;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      .discord-btn:hover { background: #4752c4; }
+      .discord-btn svg { width: 18px; height: 18px; fill: currentColor; }
+      .gate-sep { display: flex; align-items: center; gap: 10px; margin: 16px 0; color: var(--muted-2); font-size: 12px; }
+      .gate-sep::before, .gate-sep::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+      .account-line { margin: 0 0 4px; color: var(--muted); font-size: 12.5px; }
+      .account-line b { color: var(--text); font-weight: 600; }
+      .mark-img { width: 26px; height: 26px; object-fit: contain; }
+      .brand .mark-img { width: 24px; height: 24px; }
+
+      @media (max-width: 640px) {
+        .shell { padding: 18px 16px 48px; }
+        .hero-status { font-size: 18px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="gate" id="gate">
+      <div class="gate-card">
+        <div class="mark"><img class="mark-img" src="/icon.png" alt="Aegis" /></div>
+        <h1>Aegis dashboard</h1>
+        <p>Sign in with Discord if your account is linked, or use a dashboard token. Your licence key, permissions and servers follow your Aegis account.</p>
+
+        <a class="discord-btn" href="/api/auth/discord/start">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.3 4.4A19.8 19.8 0 0 0 15.4 3l-.3.7a18 18 0 0 1 4.3 1.4C15.6 3.6 12.4 3.6 8.6 5.1 10 4.5 11.4 4.1 12.9 3.8L12.6 3a19.8 19.8 0 0 0-4.9 1.4C4.4 9.2 3.5 14 3.9 18.6a20 20 0 0 0 6 3l.8-1.2a13 13 0 0 1-2.1-1l.5-.4a14.3 14.3 0 0 0 12.2 0l.5.4a13 13 0 0 1-2.1 1l.8 1.2a20 20 0 0 0 6-3c.5-5.3-.9-10-3.2-14.2ZM9.5 15.9c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Zm5 0c-1.2 0-2.2-1.1-2.2-2.4s1-2.4 2.2-2.4 2.2 1.1 2.2 2.4-1 2.4-2.2 2.4Z"/></svg>
+          Sign in with Discord
+        </a>
+        <div class="gate-sep">or use a dashboard token</div>
+
+        <div id="gate-token">
+          <label for="token">Dashboard token</label>
+          <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="AEGIS-WEB-…" />
+          <button class="btn primary wide" id="signin" type="button">Open dashboard</button>
+        </div>
+
+        <p class="error" id="gate-error" hidden></p>
+        <p class="hint" style="margin-top: 16px">
+          Get a token in the app under <b>Settings → Dashboard access</b>. New here?
+          <a href="/download">Download Aegis Control</a>.
+        </p>
+      </div>
+    </div>
+
+    <div class="shell" id="shell" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark"><img class="mark-img" src="/icon.png" alt="Aegis" /></div>
+          <div>
+            <div class="brand-name">AEGIS CONTROL</div>
+            <div class="brand-sub">Web dashboard</div>
+          </div>
+        </div>
+        <div class="topbar-right">
+          <span class="chip" id="account-chip">—</span>
+          <span class="chip mono" id="public-id">#—</span>
+          <a class="btn small" href="/download">Download</a>
+          <button class="btn small" id="signout" type="button">Sign out</button>
+        </div>
+      </header>
+
+      <section class="card hero">
+        <div class="hero-top">
+          <div class="orb" id="orb"></div>
+          <div>
+            <div class="hero-status" id="hero-status">Checking the bot…</div>
+            <div class="hero-note" id="hero-note">Talking to your Aegis server.</div>
+          </div>
+          <div class="hero-actions" id="hero-actions" style="margin-left: auto"></div>
+        </div>
+        <p class="account-line" id="account-line"></p>
+        <div class="notice info" id="hero-detail" hidden></div>
+        <div class="stats" id="stats"></div>
+      </section>
+
+      <section class="card" id="discord-card" style="margin-bottom: 16px">
+        <div class="card-head">
+          <h2>Discord</h2>
+          <span class="spacer"></span>
+          <span class="muted" id="discord-state">Not linked</span>
+        </div>
+        <p class="muted small" id="discord-note">
+          Optional. Linking checks your Discord ID against the key assigned by the owner.
+        </p>
+        <div class="field">
+          <button class="btn primary small" id="dashboard-link-discord" type="button">Link Discord</button>
+          <button class="btn small" id="dashboard-unlink-discord" type="button" hidden>Unlink Discord</button>
+        </div>
+        <p class="hint mono" id="discord-redirect" hidden></p>
+        <div class="field" id="discord-redirect-edit" hidden>
+          <input id="discord-redirect-input" spellcheck="false" placeholder="https://…/api/auth/discord/callback" />
+          <button class="btn small" id="discord-redirect-save" type="button">Save redirect URL</button>
+        </div>
+      </section>
+
+      <div class="grid">
+        <section class="card">
+          <div class="card-head">
+            <h2>Host status</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="host-updated">—</span>
+          </div>
+          <div id="host-rows"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Servers</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="guild-count">—</span>
+          </div>
+          <div id="guilds"><div class="hint">The bot has not reported any servers yet.</div></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Activity</h2>
+            <span class="spacer"></span>
+            <span class="muted">live from the host</span>
+          </div>
+          <div class="log-list" id="logs"><div class="hint">No activity yet.</div></div>
+        </section>
+
+        <section class="card" id="host-setup" hidden>
+          <div class="card-head">
+            <h2>Host runner</h2>
+            <span class="spacer"></span>
+            <span class="muted">owner only</span>
+          </div>
+          <p class="hint" style="margin: 0 0 12px">
+            The bot runs on the host runner, not in this website. Start the runner once on a machine
+            that stays on (a VPS, spare PC or free container) and this dashboard can start and stop
+            the bot from anywhere.
+          </p>
+          <div id="host-token-box" hidden>
+            <span class="setup-code" id="host-token"></span>
+            <button class="btn small" id="copy-host-token" type="button">Copy token</button>
+          </div>
+          <button class="btn primary small" id="make-host-token" type="button">Create host runner token</button>
+          <span class="setup-code" id="host-command"></span>
+          <p class="hint" id="host-setup-note"></p>
+        </section>
+
+        <section class="card" id="crash-card" hidden>
+          <div class="card-head">
+            <h2>Crash reports</h2>
+            <span class="spacer"></span>
+            <span class="muted">owner only</span>
+            <button class="btn small" id="clear-crashes" type="button">Clear</button>
+          </div>
+          <p class="hint" style="margin: 0 0 12px">
+            Why Aegis stopped, with the full stack. The host runner restarts the bot on its own,
+            so this list is the history of what broke and how it recovered.
+          </p>
+          <div id="crash-list"><div class="hint">No crashes recorded. That is the good outcome.</div></div>
+        </section>
+
+        <section class="card" id="download-card">
+          <div class="card-head">
+            <h2>Desktop app</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="release-version">—</span>
+          </div>
+          <p class="hint" style="margin: 0 0 12px" id="release-note">Windows x64 · portable .exe</p>
+          <a class="btn primary small" href="/download">Download Aegis Control</a>
+        </section>
+      </div>
+    </div>
+
+    <div class="toast-wrap" id="toasts"></div>
+
+    <script>
+      const els = (id) => document.getElementById(id);
+      const storageKey = 'aegis.web.token';
+      let token = localStorage.getItem(storageKey) || '';
+      const hashToken = new URLSearchParams(location.hash.replace(/^#/, '')).get('token');
+      if (hashToken) {
+        token = hashToken;
+        localStorage.setItem(storageKey, token);
+        history.replaceState(null, '', location.pathname);
+      }
+      let latest = null;
+      let timer = null;
+      let busy = false;
+
+      // Every request counts against the hosting allowance (10,000 a day,
+      // 100,000 a month), so the dashboard refreshes quickly while something is
+      // happening and backs off to every five minutes when it is idle or hidden.
+      const REFRESH_BASE_MS = 15_000;
+      const REFRESH_MAX_MS = 300_000;
+      let idleTicks = 0;
+
+      function toast(message, kind = '') {
+        const node = document.createElement('div');
+        node.className = `toast ${kind}`.trim();
+        node.textContent = message;
+        els('toasts').append(node);
+        setTimeout(() => node.remove(), 5200);
+      }
+
+      async function call(path, { method = 'GET', body } = {}) {
+        const headers = {};
+        if (token) headers.authorization = `Bearer ${token}`;
+        if (body !== undefined) headers['content-type'] = 'application/json';
+        const response = await fetch(`/api${path}`, {
+          method,
+          headers,
+          body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        const text = await response.text();
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = {};
+        }
+        if (!response.ok) {
+          // A paused site answers with plain text, which says more than a code.
+          const plain =
+            text && text.length <= 300 && !text.trim().startsWith('<') ? text.trim() : '';
+          const error = new Error(
+            data.error || plain || `The server rejected that request (${response.status}).`,
+          );
+          error.status = response.status;
+          throw error;
+        }
+        return data;
+      }
+
+      function showGate(message) {
+        els('gate').hidden = false;
+        els('shell').hidden = true;
+        els('gate-token').hidden = false;
+        if (message) {
+          els('gate-error').hidden = false;
+          els('gate-error').textContent = message;
+        }
+        if (timer) clearInterval(timer);
+        timer = null;
+      }
+
+      function applyAccount(account) {
+        els('account-chip').textContent = `${account.username} · ${account.role}`;
+        els('public-id').textContent = account.publicId ? `#${account.publicId}` : '#—';
+        const discord = account.discordId
+          ? `Discord @${account.discordUsername || 'linked'} · ${account.discordId}`
+          : 'Discord not linked';
+        const key = account.key
+          ? `key ${account.key.label ? `${account.key.label} · ` : ''}${account.key.masked}`
+          : 'no licence key';
+        els('account-line').textContent = `${discord} · ${key}.`;
+        els('account-chip').title = `${discord}\n${key}`;
+        const linked = Boolean(account.discordId);
+        els('discord-state').textContent = linked
+          ? `@${account.discordUsername || 'linked'}`
+          : 'Not linked';
+        els('discord-note').textContent = linked
+          ? `Linked to Discord ID ${account.discordId}. Your key is checked against this account.`
+          : 'Optional. Linking checks your Discord ID against the key assigned by the owner.';
+        els('dashboard-link-discord').hidden = linked;
+        els('dashboard-unlink-discord').hidden = !linked;
+      }
+
+      async function loadDiscordRedirect() {
+        try {
+          const data = await call('/auth/discord/status');
+          els('discord-redirect').hidden = false;
+          els('discord-redirect').textContent = `Register exactly this redirect URL in the Discord Developer Portal: ${data.redirectUri}`;
+          els('discord-redirect-edit').hidden = !data.canEditRedirect;
+          if (data.canEditRedirect && document.activeElement !== els('discord-redirect-input')) {
+            els('discord-redirect-input').value = data.redirectUri;
+          }
+        } catch {
+          els('discord-redirect').hidden = true;
+          els('discord-redirect-edit').hidden = true;
+        }
+      }
+
+      async function verifySession() {
+        const me = await call('/auth/verify', { method: 'POST' });
+        applyAccount(me.account);
+        els('gate').hidden = true;
+        els('shell').hidden = false;
+        loadDiscordRedirect();
+        return true;
+      }
+
+      function duration(ms) {
+        if (!ms || ms < 1000) return '—';
+        const s = Math.floor(ms / 1000);
+        const d = Math.floor(s / 86400);
+        const h = Math.floor((s % 86400) / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        if (d) return `${d}d ${h}h`;
+        if (h) return `${h}h ${m}m`;
+        return `${m}m ${s % 60}s`;
+      }
+
+      function clock(ms) {
+        if (!ms) return '—';
+        return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function render(bot) {
+        latest = bot;
+        const status = bot.status || {};
+        const running = Boolean(status.running);
+        const hostOnline = Boolean(bot.host?.online);
+        const waiting = bot.desired === 'running' && !running;
+
+        const orb = els('orb');
+        orb.className = `orb ${running ? 'on' : waiting ? 'waiting' : ''}`;
+        els('hero-status').textContent = running
+          ? `Aegis is online${status.tag ? ` as ${status.tag}` : ''}`
+          : waiting
+            ? 'Starting Aegis…'
+            : 'Aegis is offline';
+
+        els('hero-note').textContent = running
+          ? `Running on ${bot.host?.name || 'the host runner'} · up ${duration(status.uptimeMs)}.`
+          : hostOnline
+            ? `Host runner ${bot.host?.name || 'connected'} is ready and waiting for a start command.`
+            : 'No host runner is connected right now, so the bot cannot start until one comes back online.';
+
+        const actions = els('hero-actions');
+        actions.replaceChildren();
+        if (bot.canControl) {
+          const start = document.createElement('button');
+          start.className = 'btn primary';
+          start.type = 'button';
+          start.textContent = 'Start bot';
+          start.disabled = busy || running || !hostOnline;
+          start.addEventListener('click', () => command('start'));
+          const stop = document.createElement('button');
+          stop.className = 'btn danger';
+          stop.type = 'button';
+          stop.textContent = 'Stop bot';
+          stop.disabled = busy || !running;
+          stop.addEventListener('click', () => command('stop'));
+          actions.append(start, stop);
+        } else {
+          const note = document.createElement('span');
+          note.className = 'chip';
+          note.textContent = 'Start/stop needs the Manage bot permission';
+          actions.append(note);
+        }
+
+        const detail = els('hero-detail');
+        const error = status.lastError;
+        const hostMissing = !bot.host?.configured;
+        if (error) {
+          detail.hidden = false;
+          detail.className = 'notice bad';
+          detail.textContent = error;
+        } else if (hostMissing) {
+          detail.hidden = false;
+          detail.className = 'notice';
+          detail.textContent = bot.canHost
+            ? 'No bot host yet. Create a host runner token below and start the runner on an always-on machine.'
+            : 'No bot host has been set up yet. Ask the owner to start the host runner.';
+        } else if (waiting && !hostOnline) {
+          detail.hidden = false;
+          detail.className = 'notice';
+          detail.textContent = 'Waiting for the host runner to come back online before the bot can start.';
+        } else if (status.running && status.messageContentEnabled === false) {
+          detail.hidden = false;
+          detail.className = 'notice';
+          detail.textContent = 'Message Content Intent is off, so message text is hidden. Enable it in the Discord Developer Portal.';
+        } else {
+          detail.hidden = true;
+        }
+
+        const guilds = Array.isArray(status.guilds) ? status.guilds : [];
+        const stats = [
+          ['State', running ? 'Online' : waiting ? 'Starting' : 'Offline', running ? 'connected to Discord' : 'no gateway session'],
+          ['Servers', String(guilds.length), 'Aegis is installed in'],
+          ['Uptime', running ? duration(status.uptimeMs) : '—', 'this session'],
+          ['Host', hostOnline ? 'Online' : 'Offline', bot.host?.lastSeen ? `seen ${clock(bot.host.lastSeen)}` : 'never connected'],
+        ];
+        els('stats').innerHTML = stats
+          .map(
+            ([label, value, note]) =>
+              `<div class="stat"><span class="stat-label">${label}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></div>`,
+          )
+          .join('');
+
+        const rows = [
+          ['Host runner', hostOnline ? 'Online' : 'Offline'],
+          ['Machine', bot.host?.name || '—'],
+          ['Runner version', bot.host?.version || '—'],
+          ['Last report', bot.host?.lastSeen ? `${clock(bot.host.lastSeen)}` : '—'],
+          ['Wanted state', bot.desired === 'running' ? 'Running' : 'Stopped'],
+          ['Message Content', status.messageContentEnabled ? 'Enabled' : 'Hidden'],
+          ['Server Members', status.serverMembersEnabled ? 'Enabled' : 'Limited'],
+        ];
+        els('host-rows').innerHTML = rows
+          .map(([label, value]) => `<div class="kv"><span>${label}</span><span>${escapeHtml(value)}</span></div>`)
+          .join('');
+        els('host-updated').textContent = bot.updatedAt ? `reported ${clock(bot.updatedAt)}` : '';
+
+        els('guild-count').textContent = guilds.length ? `${guilds.length} server${guilds.length === 1 ? '' : 's'}` : '';
+        els('guilds').innerHTML = guilds.length
+          ? guilds
+              .map((guild) => {
+                const members = guild.memberCount ? `${guild.memberCount} members` : 'members hidden';
+                return `<div class="server-row"><div>${escapeHtml(guild.name)}<div class="meta">${escapeHtml(members)}</div></div><div class="meta mono">${escapeHtml(guild.id)}</div></div>`;
+              })
+              .join('')
+          : '<div class="hint">The bot has not reported any servers yet.</div>';
+
+        const logs = Array.isArray(bot.logs) ? bot.logs.slice(-60).reverse() : [];
+        els('logs').innerHTML = logs.length
+          ? logs
+              .map(
+                (entry) =>
+                  `<div class="log-line ${escapeHtml(entry.level)}"><span class="log-time">${clock(entry.at)}</span><span class="log-msg">${escapeHtml(entry.message)}</span></div>`,
+              )
+              .join('')
+          : '<div class="hint">No activity yet.</div>';
+
+        const crashes = Array.isArray(bot.crashes) ? bot.crashes : null;
+        if (els('crash-card')) {
+          els('crash-card').hidden = !crashes;
+          if (crashes) {
+            els('crash-list').innerHTML = crashes.length
+              ? crashes
+                  .slice(0, 25)
+                  .map(
+                    (entry) =>
+                      `<div class="log-line error"><span class="log-time">${clock(entry.at)}</span><span class="log-msg"><b>${escapeHtml(entry.reason)}</b> · ${escapeHtml(entry.name)}: ${escapeHtml(entry.message)}${entry.repeats ? ` (×${entry.repeats + 1})` : ''}${entry.node ? ` · ${escapeHtml(entry.node)}` : ''}</span></div>` +
+                      `<details><summary class="hint" style="cursor:pointer;margin-left:8px">Stack</summary><pre style="white-space:pre-wrap;overflow-x:auto;font-size:11.5px;color:var(--muted);margin:6px 0 10px">${escapeHtml(entry.stack || 'No stack was captured.')}</pre></details>`,
+                  )
+                  .join('')
+              : '<div class="hint">No crashes recorded. That is the good outcome.</div>';
+          }
+        }
+
+        els('host-setup').hidden = !bot.canHost;
+        if (bot.canHost) {
+          els('make-host-token').textContent = bot.host?.configured
+            ? 'Replace host runner token'
+            : 'Create host runner token';
+          els('host-setup-note').textContent = bot.host?.configured
+            ? 'Replacing the token disconnects the current runner until it is restarted with the new one.'
+            : 'Copy the token into the runner start command. It is shown only once.';
+          if (!els('host-command').dataset.ready) {
+            els('host-command').textContent =
+              'npm install\n' +
+              'DISCORD_TOKEN=<your bot token> AEGIS_HOST_TOKEN=<host token> npm run host';
+            els('host-command').dataset.ready = '1';
+          }
+        }
+      }
+
+      async function refresh() {
+        try {
+          const bot = await call('/bot');
+          els('gate').hidden = true;
+          els('shell').hidden = false;
+          render(bot);
+        } catch (error) {
+          if (error.status === 401) {
+            localStorage.removeItem(storageKey);
+            token = '';
+            showGate('That dashboard token is not valid any more. Create a new one in the app.');
+            return;
+          }
+          toast(error.message, 'err');
+        }
+      }
+
+      function snapshotKey(bot) {
+        return JSON.stringify({
+          desired: bot?.desired ?? null,
+          running: bot?.status?.running ?? null,
+          starting: bot?.status?.starting ?? null,
+          hostOnline: bot?.host?.online ?? null,
+          updatedAt: bot?.updatedAt ?? null,
+        });
+      }
+
+      function scheduleRefresh(delay = REFRESH_BASE_MS) {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(refreshTick, document.hidden ? REFRESH_MAX_MS : delay);
+      }
+
+      async function refreshTick() {
+        timer = null;
+        if (!token) return;
+        if (document.hidden) {
+          scheduleRefresh(REFRESH_MAX_MS);
+          return;
+        }
+        const before = snapshotKey(latest);
+        await refresh();
+        idleTicks = snapshotKey(latest) === before ? idleTicks + 1 : 0;
+        scheduleRefresh(Math.min(REFRESH_BASE_MS * 2 ** Math.min(idleTicks, 5), REFRESH_MAX_MS));
+      }
+
+      function startRefreshLoop() {
+        idleTicks = 0;
+        scheduleRefresh(REFRESH_BASE_MS);
+      }
+
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden || !token) return;
+        idleTicks = 0;
+        scheduleRefresh(0);
+      });
+
+      async function command(action) {
+        if (busy) return;
+        busy = true;
+        render(latest ?? { desired: 'stopped', host: {}, status: {}, logs: [], canControl: true });
+        try {
+          const bot = await call(`/bot/${action}`, { method: 'POST' });
+          render(bot);
+          toast(
+            action === 'start'
+              ? 'Start command sent. The host runner picks it up within a minute.'
+              : 'Stop command sent. The host runner picks it up within a minute.',
+          );
+        } catch (error) {
+          toast(error.message, 'err');
+        } finally {
+          busy = false;
+          idleTicks = 0;
+          refresh().finally(() => scheduleRefresh(REFRESH_BASE_MS));
+        }
+      }
+
+      async function signIn() {
+        const value = els('token').value.trim();
+        if (!value) {
+          showGate('Paste a dashboard token first.');
+          return;
+        }
+        token = value;
+        localStorage.setItem(storageKey, token);
+        els('gate-error').hidden = true;
+        try {
+          if (!(await verifySession())) return;
+          await refresh();
+          startRefreshLoop();
+        } catch (error) {
+          localStorage.removeItem(storageKey);
+          token = '';
+          showGate(error.message);
+        }
+      }
+
+      els('signin').addEventListener('click', signIn);
+      els('token').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') signIn();
+      });
+      els('signout').addEventListener('click', async () => {
+        localStorage.removeItem(storageKey);
+        token = '';
+        els('token').value = '';
+        showGate();
+      });
+      els('dashboard-link-discord').addEventListener('click', async () => {
+        const button = els('dashboard-link-discord');
+        button.disabled = true;
+        try {
+          const data = await call('/auth/discord/link/start', { method: 'POST', body: {} });
+          location.href = data.url;
+        } catch (error) {
+          toast(error.message, 'err');
+          button.disabled = false;
+        }
+      });
+      els('dashboard-unlink-discord').addEventListener('click', async () => {
+        if (!confirm('Unlink Discord from this account?')) return;
+        try {
+          await call('/auth/discord/unlink', { method: 'POST', body: {} });
+          await verifySession();
+          toast('Discord unlinked.');
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+      els('discord-redirect-save').addEventListener('click', async () => {
+        const value = els('discord-redirect-input').value.trim();
+        try {
+          await call('/auth/discord/redirect', { method: 'POST', body: { redirectUri: value } });
+          toast('Redirect URL saved. Register the same URL in the Discord Developer Portal.');
+          await loadDiscordRedirect();
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+
+      els('clear-crashes').addEventListener('click', async () => {
+        if (!confirm('Clear the crash history?')) return;
+        try {
+          await call('/bot/crashes', { method: 'DELETE' });
+          els('crash-list').innerHTML = '<div class="hint">No crashes recorded. That is the good outcome.</div>';
+          toast('Crash history cleared.');
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+
+      els('make-host-token').addEventListener('click', async () => {
+        if (!confirm('Create a new host runner token? The current runner will disconnect until it is restarted with the new token.')) return;
+        try {
+          const data = await call('/bot/host-token', { method: 'POST' });
+          els('host-token-box').hidden = false;
+          els('host-token').textContent = data.token;
+          els('host-command').textContent =
+            'npm install\n' +
+            `DISCORD_TOKEN=<your bot token> AEGIS_HOST_TOKEN=${data.token} AEGIS_SERVER=${data.server} npm run host`;
+          els('host-command').dataset.ready = '1';
+          toast('Host runner token created. Copy it into the runner now.');
+          refresh();
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+      els('copy-host-token').addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(els('host-token').textContent);
+          toast('Token copied.');
+        } catch {
+          toast('Copy failed — select the token and copy it manually.', 'err');
+        }
+      });
+
+      call('/releases/latest')
+        .then((data) => {
+          if (!data.release) return;
+          els('release-version').textContent = `v${data.release.version}`;
+          els('release-note').textContent = `${(data.release.size / 1024 / 1024).toFixed(1)} MB · Windows x64 · portable .exe`;
+        })
+        .catch(() => {});
+
+      const gateParams = new URLSearchParams(location.search);
+      const discordError = gateParams.get('discord');
+      if (discordError) {
+        const messages = {
+          'no-key': gateParams.get('message') || 'No licence key is assigned to that Discord account yet.',
+          unconfigured: gateParams.get('message') || 'Discord sign-in is not configured on this server yet.',
+          denied: 'Discord sign-in was cancelled.',
+          expired: 'That Discord sign-in expired. Try again.',
+          taken: gateParams.get('message') || 'That Discord account is already linked to another account.',
+        };
+        const message = messages[discordError] || gateParams.get('message') || 'Discord sign-in failed.';
+        if (!token) showGate(message);
+        history.replaceState(null, '', location.pathname);
+      }
+
+      if (token) {
+        verifySession()
+          .then(() => refresh())
+          .then(() => {
+            if (!token) return;
+            startRefreshLoop();
+          })
+          .catch((error) => {
+            // A paused or unreachable server is not a bad token: say so and keep
+            // the saved token so the next visit signs straight back in.
+            const status = error?.status ?? 0;
+            if (status !== 401 && status !== 403) {
+              showGate(error?.message || 'The Aegis server is unreachable right now.');
+              return;
+            }
+            showGate('Your saved dashboard token is no longer valid. Create a new one in the app.');
+          });
+      }
+    </script>
+  </body>
+</html>
