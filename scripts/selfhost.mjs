@@ -20,7 +20,8 @@ import process from 'node:process';
 import { createAegisServer } from '../server/node/server.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
-const PORT = Number(process.env.PORT || process.env.SERVER_PORT || process.env.AEGIS_PORT || 3000);
+const PORT_FROM_ENV = process.env.PORT || process.env.SERVER_PORT || process.env.AEGIS_PORT || '';
+const PORT = Number(PORT_FROM_ENV || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = process.env.AEGIS_DATA_DIR || path.join(root, 'host-data');
 const DISCORD_TOKEN = String(process.env.DISCORD_TOKEN || '').trim();
@@ -34,14 +35,31 @@ const { server, env, close } = await createAegisServer({
   sessionSecret: process.env.SESSION_SECRET || '',
 });
 
-await new Promise((resolve, reject) => {
-  server.once('error', reject);
-  server.listen(PORT, HOST, resolve);
-});
+try {
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(PORT, HOST, resolve);
+  });
+} catch (error) {
+  if (error?.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use on this machine.`);
+    console.error('Set PORT to the port the host gives you (Console -> Server info).');
+    process.exit(1);
+  }
+  if (error?.code === 'EACCES') {
+    console.error(`This process is not allowed to listen on port ${PORT}. Use the port the host gives you.`);
+    process.exit(1);
+  }
+  throw error;
+}
 
 console.log(`Aegis server listening on ${HOST}:${PORT}`);
 console.log(`  data : ${DATA_DIR}`);
 console.log(`  local: ${LOCAL_SERVER}`);
+if (!PORT_FROM_ENV) {
+  console.warn('  PORT is not set, so this listens on 3000. A hosting panel only reaches');
+  console.warn('  the port shown in Console -> Server info, so set PORT to that number.');
+}
 
 // A brand new server has no accounts, and the owner key is otherwise only shown
 // to the desktop app. Print it once here so the whole set-up works from a

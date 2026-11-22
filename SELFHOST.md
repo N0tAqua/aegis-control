@@ -11,21 +11,28 @@ host, no request allowance.
 2. Note the **Address** on Console → Server info (`node.wispbyte.com:12345`).
    The number after `:` is your port.
 
-## 2. Upload the project
+## 2. Get the code onto the server
 
-Upload the project folder with **Files** or SFTP (or let the panel pull it from
-GitHub). Keep the folder layout intact: `index.js`, `package.json`, `src/`,
-`server/` and `scripts/` must sit in the server root.
+Easiest is git: fill in **Git Repo Address** with the repository URL and
+**Install Branch** with `main`, then enable **auto update**. The panel clones the
+whole tree, so nothing can go missing.
 
-If the panel shows *"Startup file not found … no .js files in the root folder"*,
-the upload landed in a subfolder (for example `aegis/index.js`) or nothing has
-been uploaded yet. Either move the contents up one level, or point **Startup →
-JS_FILE** at that path (`aegis/index.js`).
+Uploading by hand also works (Files or SFTP). Keep the folder layout intact:
+`index.js`, `package.json`, `src/`, `server/` and `scripts/` must sit in the
+server root. If the panel shows *"Startup file not found … no .js files in the
+root folder"*, the upload landed in a subfolder or stopped half way — re-upload
+from `src/features/` inwards until every folder matches the repository.
 
 ## 3. Startup and variables
 
-**Startup** → startup file `index.js` (or Startup Command `node index.js`).
-`index.js` only boots `scripts/selfhost.mjs`.
+**Startup** → Startup Command (this also makes **auto update** actually pull):
+
+```bash
+if [ -d .git ]; then git pull --ff-only; fi; if [ -f /home/container/package.json ]; then /usr/local/bin/npm install --omit=dev --no-audit --no-fund; fi; /usr/local/bin/node /home/container/index.js
+```
+
+`index.js` only boots `scripts/selfhost.mjs`. `--ff-only` keeps the pull from
+inventing a merge commit, and `--omit=dev` stops the panel installing Electron.
 
 **Startup** → environment variables:
 
