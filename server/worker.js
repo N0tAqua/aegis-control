@@ -1020,14 +1020,93 @@ async function requirePublisher(request, env) {
   return { admin: false, account };
 }
 
-function downloadPage(release) {
+/* ------------------------------------------------------- github releases ---
+ * The Windows build can come straight from a GitHub release instead of being
+ * uploaded here: .github/workflows/build.yml attaches a fresh .exe on every
+ * push. Set AEGIS_GITHUB_REPO to "owner/repo" to switch it on. The answer is
+ * cached in settings, so page views cannot burn through GitHub's anonymous
+ * rate limit, and a failed request keeps serving the last known release. */
+const GITHUB_RELEASE_CACHE_MS = 5 * 60_000;
+
+async function githubRepo(env) {
+  const repo = String((env.AEGIS_GITHUB_REPO ?? (await getSetting(env, 'github_repo'))) ?? '').trim();
+  return /^[\w.-]+\/[\w.-]+$/.test(repo) ? repo : '';
+}
+
+function releaseFromGithub(tag, body, asset, pageUrl) {
+  const notes = String(body ?? '');
+  const declared = (/sha256:\s*([a-f0-9]{64})/i.exec(notes)?.[1] ?? '').toLowerCase();
+  const digest = String(asset.digest ?? '')
+    .replace(/^sha256:/i, '')
+    .toLowerCase();
+  const sha256 = /^[a-f0-9]{64}$/.test(declared)
+    ? declared
+    : /^[a-f0-9]{64}$/.test(digest)
+      ? digest
+      : null;
+  return {
+    version: String(tag ?? '').replace(/^v/i, ''),
+    notes: notes.slice(0, 4000),
+    sha256,
+    size: Number(asset.size) || 0,
+    downloadUrl: String(asset.browser_download_url ?? ''),
+    pageUrl: String(pageUrl ?? ''),
+    publishedAt: Date.parse(asset.updated_at) || Date.now(),
+    source: 'github',
+  };
+}
+
+async function githubRelease(env) {
+  const repo = await githubRepo(env);
+  if (!repo) return null;
+
+  let cached = null;
+  try {
+    cached = JSON.parse((await getSetting(env, 'github_release_cache')) || 'null');
+  } catch {
+    cached = null;
+  }
+  if (cached?.repo === repo && Date.now() - Number(cached.at ?? 0) < GITHUB_RELEASE_CACHE_MS) {
+    return cached.release ?? null;
+  }
+
+  let release = null;
+  try {
+    const response = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, {
+      headers: { accept: 'application/vnd.github+json', 'user-agent': 'aegis-license-server' },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      const executables = (data.assets ?? []).filter((item) => /\.exe$/i.test(String(item.name ?? '')));
+      // Prefer our own build, then anything 64-bit that is not an ARM build.
+      const asset =
+        executables.find((item) => /aegis[-_ ]?control/i.test(String(item.name))) ??
+        executables.find((item) => !/arm/i.test(String(item.name))) ??
+        executables[0];
+      if (asset) release = releaseFromGithub(data.tag_name, data.body, asset, data.html_url);
+    }
+  } catch {
+    // Keep serving the previous answer below.
+  }
+  if (!release && cached?.repo === repo) release = cached.release ?? null;
+
+  await setSetting(env, 'github_release_cache', JSON.stringify({ repo, at: Date.now(), release }));
+  return release;
+}
+
+function downloadPage(release, repo = '') {
   const version = release ? `v${release.version}` : '';
   const size = release ? `${(release.size / 1024 / 1024).toFixed(1)} MB` : '';
   const body = release
     ? `<div class="version">${version} &middot; ${size} &middot; Windows x64</div>
        <a class="btn" href="/api/download/latest" download>Download Aegis Control</a>
-       <p class="hint">Portable .exe &mdash; no installer. Windows may warn about an unsigned app:<br />choose <b>More info &rarr; Run anyway</b>.</p>`
-    : `<p class="hint">No build has been published yet. The owner can publish one from the panel.</p>`;
+       <p class="hint">Portable .exe &mdash; no installer. Windows may warn about an unsigned app:<br />choose <b>More info &rarr; Run anyway</b>.</p>
+       ${release.source === 'github' ? '<p class="hint">Newest build from GitHub.</p>' : ''}`
+    : `<p class="hint">No build is available yet.${
+        repo
+          ? ` Builds are published automatically at <a href="https://github.com/${repo}/releases">github.com/${repo}/releases</a>.`
+          : ''
+      }</p>`;
 
   return new Response(
     `<!doctype html>
@@ -2292,6 +2371,13 @@ async function handleApi(request, env, url) {
   }
 
   if (method === 'GET' && path === '/api/download/latest') {
+    const fromGithub = await githubRelease(env);
+    if (fromGithub?.downloadUrl) {
+      return new Response(null, {
+        status: 302,
+        headers: { location: fromGithub.downloadUrl },
+      });
+    }
     const row = await env.DB.prepare(
       `SELECT * FROM releases WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
     ).first();
@@ -2584,6 +2670,12 @@ async function handleApi(request, env, url) {
   }
 
   if (method === 'GET' && path === '/api/releases/latest') {
+    // A GitHub release wins when the repo is configured: the workflow attaches
+    // a fresh .exe on every push, so the app updates without a manual upload.
+    const fromGithub = await githubRelease(env);
+    if (fromGithub?.sha256 && fromGithub.downloadUrl) {
+      return json({ release: { ...fromGithub, id: 'github' } });
+    }
     const row = await env.DB.prepare(
       `SELECT * FROM releases WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
     ).first();
@@ -2752,10 +2844,14 @@ export default {
       }
       if (url.pathname === '/download' || url.pathname === '/download/') {
         await ensureSchema(env);
-        const row = await env.DB.prepare(
-          `SELECT * FROM releases WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
-        ).first();
-        return downloadPage(row);
+        const repo = await githubRepo(env);
+        const fromGithub = repo ? await githubRelease(env) : null;
+        const row = fromGithub
+          ? null
+          : await env.DB.prepare(
+              `SELECT * FROM releases WHERE published = 1 ORDER BY published_at DESC LIMIT 1`,
+            ).first();
+        return downloadPage(fromGithub ?? row, repo);
       }
       if (url.pathname === '/link' || url.pathname === '/link/') {
         return linkPage();

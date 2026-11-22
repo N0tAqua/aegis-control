@@ -57,6 +57,7 @@ bot online. Nothing to copy and nothing to run on your PC.
 
 | Variable | Effect |
 | --- | --- |
+| `AEGIS_GITHUB_REPO` | `owner/repo` whose latest release is offered on `/download` (defaults to `repository` in `package.json`) |
 | `AEGIS_HOST_RUNNER=0` | do not run the bot on this host at all |
 | `AEGIS_HOST_TOKEN` | pin the runner token instead of the generated one |
 | `AEGIS_ALWAYS_RUN=1` | the bot ignores Stop and stays up (crashes already restart it) |

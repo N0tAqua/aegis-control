@@ -21,11 +21,13 @@
 import 'dotenv/config';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { createAegisServer } from '../server/node/server.mjs';
 
 const root = path.resolve(import.meta.dirname, '..');
+const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const PORT_FROM_ENV = process.env.PORT || process.env.SERVER_PORT || process.env.AEGIS_PORT || '';
 const PORT = Number(PORT_FROM_ENV || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -40,6 +42,16 @@ const { server, env, close } = await createAegisServer({
   adminToken: process.env.ADMIN_TOKEN || '',
   sessionSecret: process.env.SESSION_SECRET || '',
 });
+
+// The download page and the app's updater take the newest build straight from
+// GitHub releases when a repository is known, so pushing code is enough.
+const GITHUB_REPO =
+  String(process.env.AEGIS_GITHUB_REPO || '').trim() ||
+  (/^github:([\w.-]+\/[\w.-]+)$/.exec(String(pkg.repository || ''))?.[1] ?? '');
+if (GITHUB_REPO) {
+  env.AEGIS_GITHUB_REPO = GITHUB_REPO;
+  console.log(`  github: ${GITHUB_REPO} (downloads follow its latest release)`);
+}
 
 try {
   await new Promise((resolve, reject) => {

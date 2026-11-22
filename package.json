@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Aegis Control: a desktop dashboard for the Aegis Discord protection bot",
+  "repository": "github:N0tAqua/aegis-control",
   "main": "electron/main.js",
   "author": "Aegis",
   "engines": {
