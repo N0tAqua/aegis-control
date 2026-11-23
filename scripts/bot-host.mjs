@@ -163,6 +163,7 @@ async function startBot() {
     runnerError = null;
     await bot.start(DISCORD_TOKEN);
     await pushRoles().catch(() => {});
+    await pushFeatures().catch(() => {});
   } catch (error) {
     runnerError = error.message;
     record('error', error.message);
@@ -205,20 +206,49 @@ async function pushRoles(guildIds) {
   }
 }
 
-async function runRolesTask(task) {
+async function pushFeatures(guildIds) {
+  if (!bot.getStatus().running) return;
+  const ids = guildIds?.length
+    ? guildIds
+    : (bot.getStatus().guilds ?? []).map((guild) => guild.id);
+  for (const guildId of ids) {
+    try {
+      const snapshot = bot.featureSnapshot(guildId);
+      await api('/api/bot/host/features', {
+        method: 'POST',
+        body: { guildId, snapshot },
+      });
+    } catch (error) {
+      record('warn', `Could not publish server tools for ${guildId}: ${error.message}`);
+    }
+  }
+}
+
+const ROLE_ACTIONS = new Set(['create', 'update', 'delete', 'move', 'refresh']);
+
+async function runTask(task) {
   const guildId = String(task.guildId ?? '');
   const payload = task.payload ?? {};
   try {
-    if (task.action === 'create') await bot.createRole(guildId, payload);
-    else if (task.action === 'update') await bot.updateRole(guildId, payload.roleId, payload);
-    else if (task.action === 'delete') await bot.deleteRole(guildId, payload.roleId, payload);
-    else if (task.action === 'move') await bot.moveRole(guildId, payload.roleId, payload.direction, payload);
-    else if (task.action === 'refresh') await pushRoles([guildId]);
-    else throw new Error(`Unknown role action "${task.action}".`);
-    await api('/api/bot/host/tasks', { method: 'POST', body: { id: task.id, ok: true } });
-    await pushRoles([guildId]);
+    if (ROLE_ACTIONS.has(task.action)) {
+      if (task.action === 'create') await bot.createRole(guildId, payload);
+      else if (task.action === 'update') await bot.updateRole(guildId, payload.roleId, payload);
+      else if (task.action === 'delete') await bot.deleteRole(guildId, payload.roleId, payload);
+      else if (task.action === 'move') await bot.moveRole(guildId, payload.roleId, payload.direction, payload);
+      else if (task.action === 'refresh') await pushRoles([guildId]);
+      await api('/api/bot/host/tasks', { method: 'POST', body: { id: task.id, ok: true } });
+      await pushRoles([guildId]);
+      if (task.action !== 'refresh') await pushFeatures([guildId]);
+      return;
+    }
+
+    const result = await bot.runFeatureTask(task);
+    const { snapshot, ...summary } = result ?? {};
+    await api('/api/bot/host/tasks', { method: 'POST', body: { id: task.id, ok: true, result: summary } });
+    if (snapshot) await api('/api/bot/host/features', { method: 'POST', body: { guildId, snapshot } }).catch(() => {});
+    else await pushFeatures([guildId]);
   } catch (error) {
-    record('warn', `Role change failed: ${error.message}`);
+    record('warn', `Server action failed: ${error.message}`);
     await api('/api/bot/host/tasks', {
       method: 'POST',
       body: { id: task.id, ok: false, error: error.message },
@@ -230,10 +260,10 @@ async function pollTasks() {
   if (!bot.getStatus().running) return;
   try {
     const data = await api('/api/bot/host/tasks');
-    for (const task of data.tasks ?? []) await runRolesTask(task);
+    for (const task of data.tasks ?? []) await runTask(task);
   } catch (error) {
     if (error.status === 401 || error.status === 403) {
-      record('error', `Role task poll rejected: ${error.message}`);
+      record('error', `Task poll rejected: ${error.message}`);
     }
   }
 }
@@ -294,12 +324,16 @@ async function report() {
     }
   }
   await flushCrashes().catch(() => {});
-  if (status.running) await pushRoles().catch(() => {});
+  if (status.running) {
+    await pushRoles().catch(() => {});
+    await pushFeatures().catch(() => {});
+  }
 }
 
 let pollTimer = null;
 let reportTimer = null;
 let taskTimer = null;
+let featureTimer = null;
 let closed = false;
 
 async function shutdown(signal) {
@@ -308,6 +342,7 @@ async function shutdown(signal) {
   clearInterval(pollTimer);
   clearInterval(reportTimer);
   clearInterval(taskTimer);
+  clearInterval(featureTimer);
   console.log(`\n${signal} received — stopping the bot…`);
   await bot.stop().catch(() => {});
   process.exit(0);
@@ -351,3 +386,6 @@ if (!ALWAYS_RUN && !reachable && desired === 'running') {
 pollTimer = setInterval(poll, POLL_MS);
 reportTimer = setInterval(report, REPORT_MS);
 taskTimer = setInterval(pollTasks, TASK_MS);
+// Panic mode and slash commands change state without a queued task, so the
+// dashboard gets a fresh snapshot every minute instead of waiting for a report.
+featureTimer = setInterval(() => pushFeatures().catch(() => {}), 60_000);

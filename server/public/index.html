@@ -395,6 +395,81 @@
       .role-row + .role-row {
         margin-top: 7px;
       }
+
+      .tool-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 14px;
+      }
+
+      .tool-tab {
+        padding: 7px 12px;
+        border-radius: 8px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        color: var(--muted);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .tool-tab.active {
+        background: var(--brand);
+        border-color: transparent;
+        color: #0b0c10;
+        font-weight: 600;
+      }
+
+      .tool-panel {
+        display: none;
+      }
+
+      .tool-panel.active {
+        display: block;
+      }
+
+      .tool-status {
+        padding: 10px 12px;
+        margin-bottom: 10px;
+        border-radius: 10px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        font-size: 12px;
+      }
+
+      .tool-status.danger {
+        border-color: rgba(255, 100, 130, 0.45);
+        color: #ffb3c1;
+      }
+
+      .tool-list {
+        display: grid;
+        gap: 7px;
+        margin-top: 10px;
+      }
+
+      .tool-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 9px 11px;
+        border-radius: 9px;
+        border: 1px solid var(--line);
+        background: var(--panel-2);
+        font-size: 12px;
+        flex-wrap: wrap;
+      }
+
+      .tool-row.danger {
+        border-color: rgba(255, 100, 130, 0.35);
+        color: #ffb3c1;
+      }
+
+      .tool-row input[type="number"] {
+        width: 70px;
+      }
     </style>
   </head>
   <body>
@@ -537,6 +612,115 @@
             <button class="btn small" id="role-cancel" type="button">Cancel</button>
           </div>
           <div id="role-list"><div class="hint">Press Add all to load the roles.</div></div>
+        </section>
+
+        <section class="card" id="tools-card" hidden style="margin-bottom: 16px">
+          <div class="card-head">
+            <h2>Server tools</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="tools-note">—</span>
+          </div>
+          <p class="hint" style="margin: 0 0 12px">
+            Panic mode, anti-nuke, the server doctor, the coin shop, events, stat counters and the
+            copilot. Each action is queued for the host runner and applied inside Discord.
+          </p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px">
+            <select id="tools-guild"></select>
+          </div>
+          <div class="tool-tabs" id="tool-tabs">
+            <button class="tool-tab active" type="button" data-tool="panic">🚨 Panic</button>
+            <button class="tool-tab" type="button" data-tool="guard">🛡️ Guard</button>
+            <button class="tool-tab" type="button" data-tool="doctor">🩺 Doctor</button>
+            <button class="tool-tab" type="button" data-tool="coins">💰 Coins</button>
+            <button class="tool-tab" type="button" data-tool="events">📅 Events</button>
+            <button class="tool-tab" type="button" data-tool="stats">📊 Stats</button>
+            <button class="tool-tab" type="button" data-tool="copilot">🧠 Copilot</button>
+          </div>
+
+          <div class="tool-panel active" data-tool-panel="panic">
+            <div class="tool-status" id="panic-state">—</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <input id="panic-reason" placeholder="Reason (optional)" maxlength="200" style="flex: 1; min-width: 140px" />
+              <select id="panic-role"><option value="">No quarantine role</option></select>
+              <input id="panic-window" type="number" min="1" max="10080" value="60" title="Quarantine joins from the last N minutes" style="width: 90px" />
+              <button class="btn primary small" id="panic-on" type="button">Lock server</button>
+              <button class="btn small" id="panic-off" type="button">Restore</button>
+            </div>
+            <div class="tool-list" id="panic-timeline"></div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="guard">
+            <div class="tool-status" id="guard-state">—</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <label class="chip"><input type="checkbox" id="guard-enabled" /> Guard on</label>
+              <label class="chip">Actions <input id="guard-threshold" type="number" min="2" max="20" value="3" style="width: 60px" /></label>
+              <label class="chip">Window (s) <input id="guard-window" type="number" min="10" max="600" value="60" style="width: 70px" /></label>
+              <select id="guard-channel"><option value="">Moderation log channel</option></select>
+              <button class="btn primary small" id="guard-save" type="button">Save</button>
+            </div>
+            <div class="tool-list" id="guard-incidents"></div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="doctor">
+            <div class="tool-status" id="doctor-state">—</div>
+            <button class="btn primary small" id="doctor-run" type="button">Run audit</button>
+            <div class="tool-list" id="doctor-checks"></div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="coins">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+              <label class="chip"><input type="checkbox" id="coins-enabled" /> Earning on</label>
+              <label class="chip">Per message <input id="coins-message" type="number" min="0" max="100" value="3" style="width: 60px" /></label>
+              <label class="chip">Per voice min <input id="coins-voice" type="number" min="0" max="100" value="2" style="width: 60px" /></label>
+              <label class="chip">Cooldown (s) <input id="coins-cooldown" type="number" min="0" max="3600" value="45" style="width: 70px" /></label>
+              <button class="btn primary small" id="coins-save" type="button">Save</button>
+            </div>
+            <div class="tool-list" id="shop-items"></div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px">
+              <select id="shop-role"><option value="">Choose a role</option></select>
+              <input id="shop-name" placeholder="Shop label" maxlength="80" style="flex: 1; min-width: 120px" />
+              <input id="shop-price" type="number" min="0" value="100" title="Price" style="width: 90px" />
+              <input id="shop-stock" type="number" min="0" value="0" title="Stock, 0 = unlimited" style="width: 80px" />
+              <button class="btn primary small" id="shop-add" type="button">Add reward</button>
+            </div>
+            <div class="tool-list" id="coins-top"></div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px">
+              <input id="coins-user" placeholder="Member ID" style="flex: 1; min-width: 140px" />
+              <input id="coins-amount" type="number" min="1" value="100" style="width: 90px" />
+              <button class="btn small" id="coins-give" type="button">Add coins</button>
+            </div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="events">
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px">
+              <input id="event-title" placeholder="Event title" maxlength="100" style="flex: 1; min-width: 140px" />
+              <input id="event-starts" placeholder="2h" maxlength="20" value="2h" style="width: 80px" />
+              <select id="event-channel"><option value="">Event channel</option></select>
+              <input id="event-capacity" type="number" min="0" value="0" title="Capacity, 0 = unlimited" style="width: 80px" />
+              <button class="btn primary small" id="event-create" type="button">Create event</button>
+            </div>
+            <div class="tool-list" id="event-list"></div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="stats">
+            <div class="tool-status" id="stats-state">—</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap">
+              <input id="stats-category" value="📊 Server Stats" maxlength="90" style="flex: 1; min-width: 140px" />
+              <button class="btn primary small" id="stats-setup" type="button">Create counters</button>
+              <button class="btn small" id="stats-off" type="button">Remove</button>
+            </div>
+            <div class="tool-list" id="stats-list"></div>
+          </div>
+
+          <div class="tool-panel" data-tool-panel="copilot">
+            <p class="hint" id="copilot-hint" style="margin: 0 0 8px">Describe a change, review the plan, then apply it.</p>
+            <textarea id="copilot-request" rows="3" placeholder="create a tournament category with info, rules and chat" style="width: 100%"></textarea>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px">
+              <button class="btn primary small" id="copilot-plan" type="button">Make a plan</button>
+              <button class="btn small" id="copilot-apply" type="button" hidden>Apply changes</button>
+            </div>
+            <div class="tool-list" id="copilot-output"></div>
+          </div>
         </section>
 
         <section class="card">
@@ -694,9 +878,14 @@
 
         canManageBot = scopes.includes('manageBot');
         els('roles-card').hidden = !canManageBot;
+        els('tools-card').hidden = !canManageBot;
         if (canManageBot && !rolesLoaded) {
           rolesLoaded = true;
           loadRoles();
+        }
+        if (canManageBot && !toolsLoaded) {
+          toolsLoaded = true;
+          loadTools();
         }
       }
 
@@ -1375,6 +1564,372 @@
         const button = event.target.closest('button[data-act]');
         if (!button) return;
         roleAction(button.dataset.role, button.dataset.act);
+      });
+
+      /* ---------------------------------------------------------- server tools --- */
+
+      let toolsLoaded = false;
+      let toolsState = null;
+      let copilotPlan = null;
+
+      function toolOptions(items, placeholder) {
+        if (placeholder === null) {
+          return items.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('');
+        }
+        return `<option value="">${escapeHtml(placeholder)}</option>${items
+          .map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`)
+          .join('')}`;
+      }
+
+      function setToolOptions(id, placeholder, items) {
+        const node = els(id);
+        if (!node) return;
+        const current = node.value;
+        const signature = items.map((item) => item.id).join(',');
+        if (node.dataset.signature !== signature) {
+          node.innerHTML = toolOptions(items, placeholder);
+          node.dataset.signature = signature;
+        }
+        if (current) node.value = current;
+      }
+
+      async function loadTools(guildId) {
+        if (!canManageBot) return;
+        try {
+          const query = guildId || toolsState?.guildId || '';
+          toolsState = await call(`/features${query ? `?guild=${encodeURIComponent(query)}` : ''}`);
+          renderTools();
+        } catch (error) {
+          els('tools-note').textContent = error.message;
+        }
+      }
+
+      async function runToolTask(action, payload = {}) {
+        const { id } = await call('/features', {
+          method: 'POST',
+          body: { action, guildId: toolsState?.guildId, payload },
+        });
+        const deadline = Date.now() + 30_000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          const task = await call(`/features/task/${encodeURIComponent(id)}`).catch(() => null);
+          if (!task) continue;
+          if (task.status === 'done') return task.result;
+          if (task.status === 'error') {
+            throw new Error(task.result?.error || 'That action failed in Discord.');
+          }
+        }
+        throw new Error('The host runner did not answer. Check that it is online.');
+      }
+
+      async function toolAction(action, payload, message) {
+        try {
+          const result = await runToolTask(action, payload);
+          await loadTools();
+          if (message) toast(message);
+          return result;
+        } catch (error) {
+          toast(error.message, 'err');
+          return null;
+        }
+      }
+
+      function renderTools() {
+        const data = toolsState;
+        if (!data) return;
+        const features = data.features || {};
+        const guilds = data.guilds || [];
+        const roles = features.roles || [];
+        const channels = (features.channels || []).filter((channel) => channel.type === 0);
+
+        const select = els('tools-guild');
+        const signature = `${data.guildId}:${guilds.map((guild) => guild.id).join(',')}`;
+        if (select.dataset.signature !== signature) {
+          select.innerHTML = guilds
+            .map(
+              (guild) =>
+                `<option value="${escapeHtml(guild.id)}"${guild.id === data.guildId ? ' selected' : ''}>${escapeHtml(guild.name)}</option>`,
+            )
+            .join('');
+          select.dataset.signature = signature;
+        }
+        select.hidden = guilds.length < 2;
+        els('tools-note').textContent = data.guildName
+          ? `${data.guildName} · ${data.hostOnline ? 'runner online' : 'runner offline'}`
+          : 'The bot has not reported a server yet.';
+
+        setToolOptions('panic-role', 'No quarantine role', roles);
+        setToolOptions('guard-channel', 'Moderation log channel', channels);
+        setToolOptions('shop-role', 'Choose a role', roles);
+        setToolOptions('event-channel', 'Event channel', channels);
+
+        const panic = features.panic || {};
+        els('panic-role').value = panic.quarantineRoleId || '';
+        els('panic-state').textContent = panic.active
+          ? `LOCKED since ${new Date(panic.startedAt).toLocaleTimeString()} by ${panic.by || 'dashboard'} · ${panic.channels} channel(s)`
+          : panic.endedAt
+            ? `Off · last used ${new Date(panic.endedAt).toLocaleString()}`
+            : 'Off · ready';
+        els('panic-state').classList.toggle('danger', Boolean(panic.active));
+        els('panic-window').value = Math.round((panic.joinWindowMs || 3600000) / 60000);
+        const timeline = [...(panic.timeline || [])].reverse();
+        els('panic-timeline').innerHTML = timeline.length
+          ? timeline.map((entry) => `<div class="tool-row">${escapeHtml(new Date(entry.at).toLocaleTimeString())} — ${escapeHtml(entry.text)}</div>`).join('')
+          : '<div class="tool-row">No changes recorded.</div>';
+
+        const guard = features.guard || {};
+        els('guard-enabled').checked = Boolean(guard.enabled);
+        els('guard-threshold').value = guard.threshold || 3;
+        els('guard-window').value = Math.round((guard.windowMs || 60000) / 1000);
+        els('guard-channel').value = guard.channelId || '';
+        els('guard-state').textContent = guard.enabled
+          ? `On · ${guard.threshold} actions in ${Math.round(guard.windowMs / 1000)}s · ${(guard.trustedRoles || []).length} trusted role(s)`
+          : 'Off · destructive staff actions are not watched';
+        els('guard-state').classList.toggle('danger', Boolean(guard.enabled));
+        els('guard-incidents').innerHTML = (guard.incidents || []).length
+          ? guard.incidents
+              .map(
+                (incident) =>
+                  `<div class="tool-row"><span>${escapeHtml(new Date(incident.at).toLocaleString())} — ${escapeHtml(incident.actorName)} did ${incident.count}× ${escapeHtml(incident.label)}</span><span class="chip">${escapeHtml(
+                    incident.removed?.length ? `stripped ${incident.removed.length} role(s)` : incident.note || 'no roles removed',
+                  )}</span></div>`,
+              )
+              .join('')
+          : '<div class="tool-row">No incidents recorded.</div>';
+
+        const doctor = features.doctor || {};
+        els('doctor-state').textContent = doctor.lastRunAt
+          ? `Health ${doctor.score}/100 (${doctor.grade}) · last audit ${new Date(doctor.lastRunAt).toLocaleString()}`
+          : 'No audit yet.';
+        els('doctor-checks').innerHTML = !doctor.lastRunAt
+          ? '<div class="tool-row">Run an audit to check permissions, leaks and dead channels.</div>'
+          : (doctor.checks || []).length
+            ? doctor.checks
+                .map(
+                  (entry) => `<div class="tool-row ${entry.severity === 'high' ? 'danger' : ''}"><div><b>${escapeHtml(entry.title)}</b><div class="hint">${escapeHtml(
+                    entry.detail,
+                  )}</div></div>${entry.fix ? `<button class="btn small" data-fix="${escapeHtml(entry.fix)}">Fix</button>` : ''}</div>`,
+                )
+                .join('')
+            : '<div class="tool-row">Everything looks healthy.</div>';
+
+        const economy = features.economy || {};
+        els('coins-enabled').checked = economy.enabled !== false;
+        els('coins-message').value = economy.perMessage ?? 3;
+        els('coins-voice').value = economy.perVoiceMinute ?? 2;
+        els('coins-cooldown').value = economy.cooldownSec ?? 45;
+        els('shop-items').innerHTML = (economy.items || []).length
+          ? economy.items
+              .map(
+                (item) => `<div class="tool-row" data-item="${escapeHtml(item.id)}">
+                  <input data-field="name" value="${escapeHtml(item.name)}" maxlength="80" style="flex:1;min-width:110px" />
+                  <input data-field="price" type="number" min="0" value="${Number(item.price) || 0}" title="Price" />
+                  <input data-field="stock" type="number" min="0" value="${Number(item.stock) || 0}" title="Stock, 0 = unlimited" />
+                  <button class="btn small" data-act="save" type="button">Save</button>
+                  <button class="btn small danger" data-act="remove" type="button">Remove</button>
+                </div>`,
+              )
+              .join('')
+          : '<div class="tool-row">The shop is empty.</div>';
+        els('coins-top').innerHTML = (economy.top || []).length
+          ? economy.top.map((row) => `<div class="tool-row"><span>${escapeHtml(row.userId)}</span><b>${row.coins} coins</b></div>`).join('')
+          : '<div class="tool-row">Nobody has coins yet.</div>';
+
+        els('event-list').innerHTML = (features.events?.items || []).length
+          ? features.events.items
+              .map(
+                (item) => `<div class="tool-row" data-event="${escapeHtml(item.id)}"><div><b>${escapeHtml(item.title)}</b><div class="hint">${escapeHtml(
+                  new Date(item.startsAt).toLocaleString(),
+                )} · ${item.going} going${item.waitlist ? ` · ${item.waitlist} waitlist` : ''} · ${escapeHtml(item.status)}</div></div>${
+                  item.status === 'cancelled' ? '' : '<button class="btn small danger" data-act="cancel" type="button">Cancel</button>'
+                }</div>`,
+              )
+              .join('')
+          : '<div class="tool-row">No events yet.</div>';
+
+        const stats = features.stats || {};
+        els('stats-state').textContent = stats.enabled
+          ? `On · ${Object.keys(stats.channels || {}).length} counter(s) · refreshed ${stats.lastRunAt ? new Date(stats.lastRunAt).toLocaleTimeString() : 'never'}`
+          : 'Off · no counter channels';
+        els('stats-list').innerHTML = Object.values(stats.lastNames || {})
+          .map((name) => `<div class="tool-row">${escapeHtml(name)}</div>`)
+          .join('');
+
+        els('copilot-hint').textContent = features.ai
+          ? 'Describe a change, review the plan, then apply it.'
+          : 'AI key not set, so the copilot only understands simple requests (categories, channels, roles, panic mode, stat counters).';
+      }
+
+      for (const tab of document.querySelectorAll('.tool-tab')) {
+        tab.addEventListener('click', () => {
+          for (const other of document.querySelectorAll('.tool-tab')) other.classList.toggle('active', other === tab);
+          for (const panel of document.querySelectorAll('[data-tool-panel]')) {
+            panel.classList.toggle('active', panel.dataset.toolPanel === tab.dataset.tool);
+          }
+        });
+      }
+      els('tools-guild').addEventListener('change', () => loadTools(els('tools-guild').value));
+      els('panic-on').addEventListener('click', () => {
+        const minutes = Math.max(1, Number(els('panic-window').value) || 60);
+        toolAction(
+          'panic_on',
+          {
+            reason: els('panic-reason').value.trim(),
+            quarantineRoleId: els('panic-role').value || null,
+            windowMs: minutes * 60000,
+          },
+          'Panic mode is on.',
+        );
+      });
+      els('panic-off').addEventListener('click', () => toolAction('panic_off', {}, 'Server restored.'));
+      els('guard-save').addEventListener('click', () =>
+        toolAction(
+          'guard_update',
+          {
+            enabled: els('guard-enabled').checked,
+            threshold: Number(els('guard-threshold').value) || 3,
+            windowMs: (Number(els('guard-window').value) || 60) * 1000,
+            channelId: els('guard-channel').value || null,
+          },
+          'Guard settings saved.',
+        ),
+      );
+      els('doctor-run').addEventListener('click', () => toolAction('doctor_run', {}, 'Audit complete.'));
+      els('doctor-checks').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-fix]');
+        if (!button) return;
+        toolAction('doctor_fix', { kind: button.dataset.fix }, 'Fix applied.');
+      });
+      els('coins-save').addEventListener('click', () =>
+        toolAction(
+          'economy_update',
+          {
+            enabled: els('coins-enabled').checked,
+            perMessage: Number(els('coins-message').value) || 0,
+            perVoiceMinute: Number(els('coins-voice').value) || 0,
+            cooldownSec: Number(els('coins-cooldown').value) || 0,
+          },
+          'Coin settings saved.',
+        ),
+      );
+      els('shop-add').addEventListener('click', () => {
+        const roleId = els('shop-role').value;
+        if (!roleId) {
+          toast('Choose a role first.', 'err');
+          return;
+        }
+        toolAction(
+          'shop_save',
+          {
+            roleId,
+            name: els('shop-name').value.trim(),
+            price: Number(els('shop-price').value) || 0,
+            stock: Number(els('shop-stock').value) || 0,
+          },
+          'Reward added.',
+        );
+      });
+      els('shop-items').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-act]');
+        if (!button) return;
+        const row = button.closest('[data-item]');
+        const item = (toolsState?.features?.economy?.items || []).find((entry) => entry.id === row?.dataset.item);
+        if (!item) return;
+        if (button.dataset.act === 'remove') {
+          if (!confirm(`Remove "${item.name}" from the shop?`)) return;
+          toolAction('shop_delete', { itemId: item.id }, 'Reward removed.');
+          return;
+        }
+        const field = (name) => row.querySelector(`[data-field="${name}"]`)?.value;
+        toolAction(
+          'shop_save',
+          {
+            itemId: item.id,
+            roleId: item.roleId,
+            name: field('name'),
+            price: Number(field('price')) || 0,
+            stock: Number(field('stock')) || 0,
+          },
+          'Reward saved.',
+        );
+      });
+      els('coins-give').addEventListener('click', () => {
+        const userId = els('coins-user').value.trim();
+        if (!/^\d{17,20}$/.test(userId)) {
+          toast('Paste a Discord member ID.', 'err');
+          return;
+        }
+        toolAction('coins_give', { userId, amount: Number(els('coins-amount').value) || 1 }, 'Coins added.');
+      });
+      els('event-create').addEventListener('click', () => {
+        const title = els('event-title').value.trim();
+        const channelId = els('event-channel').value;
+        if (!title || !channelId) {
+          toast('Add a title and pick a channel.', 'err');
+          return;
+        }
+        toolAction(
+          'event_create',
+          { title, channelId, startsIn: els('event-starts').value.trim() || '1h', capacity: Number(els('event-capacity').value) || 0 },
+          'Event posted.',
+        );
+      });
+      els('event-list').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-act="cancel"]');
+        if (!button) return;
+        const row = button.closest('[data-event]');
+        toolAction('event_cancel', { eventId: row.dataset.event }, 'Event cancelled.');
+      });
+      els('stats-setup').addEventListener('click', () =>
+        toolAction('stats_setup', { categoryName: els('stats-category').value.trim() || '📊 Server Stats' }, 'Counter channels created.'),
+      );
+      els('stats-off').addEventListener('click', () => toolAction('stats_off', {}, 'Counter channels removed.'));
+
+      function copilotLabel(step) {
+        if (step.op === 'create_category') return `Create category ${step.name}`;
+        if (step.op === 'create_text') return `Create text channel #${step.name}${step.category ? ` in ${step.category}` : ''}`;
+        if (step.op === 'create_voice') return `Create voice channel ${step.name}${step.category ? ` in ${step.category}` : ''}`;
+        if (step.op === 'create_role') return `Create role ${step.name}`;
+        if (step.op === 'slowmode') return `Slowmode on ${step.channel || 'a channel'} → ${step.seconds}s`;
+        if (step.op === 'post_message') return `Post a message in ${step.channel || 'the first channel'}`;
+        if (step.op === 'panic') return step.on ? 'Turn on panic mode' : 'Turn off panic mode';
+        return 'Create the stat channels';
+      }
+
+      els('copilot-plan').addEventListener('click', async () => {
+        const request = els('copilot-request').value.trim();
+        if (!request) {
+          toast('Describe what you want first.', 'err');
+          return;
+        }
+        try {
+          const result = await runToolTask('copilot_plan', { request });
+          copilotPlan = result?.data?.result || null;
+          const plan = copilotPlan?.steps?.length ? copilotPlan : null;
+          els('copilot-output').innerHTML = plan
+            ? `<div class="tool-row">${escapeHtml(plan.summary)}</div>${plan.steps
+                .map((step, index) => `<div class="tool-row">${index + 1}. ${escapeHtml(copilotLabel(step))}</div>`)
+                .join('')}`
+            : `<div class="tool-row">${escapeHtml(copilotPlan?.summary || 'The copilot could not turn that into changes.')}</div>`;
+          els('copilot-apply').hidden = !plan;
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      });
+      els('copilot-apply').addEventListener('click', async () => {
+        if (!copilotPlan) return;
+        try {
+          const result = await runToolTask('copilot_apply', { plan: copilotPlan });
+          const steps = result?.data?.result?.steps || [];
+          els('copilot-output').innerHTML = steps
+            .map((step) => `<div class="tool-row ${step.ok ? '' : 'danger'}">${step.ok ? '✓' : '✕'} ${escapeHtml(step.detail)}</div>`)
+            .join('');
+          els('copilot-apply').hidden = true;
+          await loadTools();
+          toast('Plan applied.');
+        } catch (error) {
+          toast(error.message, 'err');
+        }
       });
 
       els('copy-host-token').addEventListener('click', async () => {

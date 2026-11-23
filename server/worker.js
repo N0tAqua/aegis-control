@@ -932,6 +932,16 @@ async function readRoleSnapshot(env) {
   }
 }
 
+/** Server-tool snapshots (panic, guard, doctor, economy, events, stats, copilot). */
+async function readFeatureSnapshot(env) {
+  try {
+    const parsed = JSON.parse((await getSetting(env, 'bot_features')) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 /** The bot itself runs on a host runner; here we only keep its last report. */
 async function readBotState(env) {
   const [desired, seenRaw, storedRaw, configuredRaw] = await Promise.all([
@@ -1638,6 +1648,21 @@ async function handleApi(request, env, url) {
     return json({ ok: true, roles: snapshot[guildId].roles.length });
   }
 
+  if (method === 'POST' && path === '/api/bot/host/features') {
+    await requireHost(env, request);
+    const body = await readBody(request);
+    const guildId = String(body.guildId ?? '').trim();
+    if (!/^\d{17,20}$/.test(guildId)) bad('guildId must be a Discord server ID.');
+    if (!body.snapshot || typeof body.snapshot !== 'object') bad('A snapshot is required.');
+    const raw = JSON.stringify(body.snapshot);
+    if (raw.length > 300000) bad('That snapshot is too large.');
+    const snapshot = await readFeatureSnapshot(env);
+    snapshot[guildId] = JSON.parse(raw);
+    snapshot[guildId].updatedAt = Date.now();
+    await setSetting(env, 'bot_features', JSON.stringify(snapshot));
+    return json({ ok: true });
+  }
+
   if (method === 'GET' && path === '/api/bot/host/tasks') {
     await requireHost(env, request);
     // Anything nobody collected in ten minutes is stale (the panel gave up).
@@ -1675,9 +1700,11 @@ async function handleApi(request, env, url) {
     const id = String(body.id ?? '').trim();
     if (!id) bad('A task id is required.');
     const ok = body.ok !== false;
+    const extra = body.result && typeof body.result === 'object' ? body.result : null;
     const result = {
       ok,
       error: ok ? null : String(body.error ?? 'That change failed.').slice(0, 300),
+      ...(extra ? { data: extra } : {}),
     };
     await env.DB.prepare('UPDATE bot_tasks SET status = ?, result = ?, updated_at = ? WHERE id = ?')
       .bind(ok ? 'done' : 'error', JSON.stringify(result), Date.now(), id)
@@ -2543,6 +2570,102 @@ async function handleApi(request, env, url) {
     return json({ id: roleTaskMatch[1], status: row.status, result, updatedAt: row.updated_at });
   }
 
+  /* ------------------------------------------------------------ server tools ---
+   * Panic mode, the anti-nuke guard, the server doctor, the coin shop, events,
+   * stat channels and the copilot all run on the host runner. The panel queues
+   * one task, the runner executes it and pushes a fresh snapshot back.
+   */
+
+  const FEATURE_ACTIONS = [
+    'panic_on',
+    'panic_off',
+    'guard_update',
+    'doctor_run',
+    'doctor_fix',
+    'economy_update',
+    'shop_save',
+    'shop_delete',
+    'coins_give',
+    'event_create',
+    'event_cancel',
+    'stats_setup',
+    'stats_off',
+    'stats_refresh',
+    'copilot_plan',
+    'copilot_apply',
+  ];
+
+  if (method === 'GET' && path === '/api/features') {
+    const state = await authenticate(env, request);
+    const account = requireAuth(state);
+    const botState = await readBotState(env);
+    const guilds = (botState.status?.guilds ?? []).map((guild) => ({ id: guild.id, name: guild.name }));
+    const wanted = url.searchParams.get('guild') || '';
+    const guildId = guilds.some((guild) => guild.id === wanted) ? wanted : (guilds[0]?.id ?? '');
+    const snapshot = await readFeatureSnapshot(env);
+    const entry = snapshot[guildId] ?? {};
+    return json({
+      guilds,
+      guildId,
+      guildName: guilds.find((guild) => guild.id === guildId)?.name ?? null,
+      canManage: hasScope(account, 'manageBot'),
+      hostOnline: botState.host.online,
+      features: entry,
+      updatedAt: entry.updatedAt ?? null,
+    });
+  }
+
+  if (method === 'POST' && path === '/api/features') {
+    const state = await authenticate(env, request);
+    const account = requireAuth(state);
+    requireScope(account, 'manageBot');
+    const botState = await readBotState(env);
+    if (!botState.host.online) {
+      bad('The host runner is offline, so Discord cannot be reached right now.', 409);
+    }
+    if (botState.status?.running === false) {
+      bad('Aegis is stopped. Start it from the overview first.', 409);
+    }
+    const body = await readBody(request);
+    const action = String(body.action ?? '').trim();
+    if (!FEATURE_ACTIONS.includes(action)) bad('Unknown server tool action.');
+    const guildId = String(body.guildId ?? '').trim();
+    if (!/^\d{17,20}$/.test(guildId)) bad('Choose a server first.');
+    const payload = body.payload && typeof body.payload === 'object' ? body.payload : {};
+    payload.by = account.username;
+    const raw = JSON.stringify(payload);
+    if (raw.length > 16000) bad('That request is too large.');
+
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO bot_tasks (id, action, guild_id, payload, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    )
+      .bind(id, action, guildId, raw, now, now)
+      .run();
+    return json({ id, queued: true });
+  }
+
+  const featureTaskMatch = path.match(/^\/api\/features\/task\/([A-Za-z0-9-]+)$/);
+  if (featureTaskMatch && method === 'GET') {
+    const state = await authenticate(env, request);
+    requireAuth(state);
+    const row = await env.DB.prepare(
+      'SELECT status, result, updated_at FROM bot_tasks WHERE id = ?',
+    )
+      .bind(featureTaskMatch[1])
+      .first();
+    if (!row) bad('That action is no longer in the queue.', 404);
+    let result = null;
+    try {
+      result = row.result ? JSON.parse(row.result) : null;
+    } catch {
+      result = null;
+    }
+    return json({ id: featureTaskMatch[1], status: row.status, result, updatedAt: row.updated_at });
+  }
+
   if (method === 'GET' && path === '/api/download/latest') {
     const fromGithub = await githubRelease(env);
     if (fromGithub?.downloadUrl) {
@@ -3002,6 +3125,144 @@ p{color:#9aa3b2;margin:0}
   );
 }
 
+function legalShell(title, body) {
+  return new Response(
+    `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis Control — ${title}</title>
+<style>
+:root{color-scheme:dark}
+body{margin:0;background:#0b0c10;color:#e7ebf3;font:15px/1.7 system-ui,Segoe UI,sans-serif}
+main{max-width:760px;margin:0 auto;padding:48px 22px 80px}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:26px;font-weight:600;letter-spacing:.02em}
+.brand span{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:#6f9bff;color:#0b0c10;font-size:15px}
+h1{font-size:28px;margin:0 0 6px}
+h2{font-size:17px;margin:30px 0 8px;color:#fff}
+p,li{color:#aeb7c8}
+.muted{color:#7b8599;font-size:13px}
+a{color:#8fb2ff}
+nav{display:flex;gap:16px;margin:18px 0 30px;font-size:14px}
+hr{border:0;border-top:1px solid #22262f;margin:34px 0}
+code{background:#171a21;padding:1px 5px;border-radius:4px;font-size:13px}
+</style></head>
+<body><main>
+<div class="brand"><span>A</span>Aegis Control</div>
+<h1>${title}</h1>
+<p class="muted">Last updated: 23 November 2026</p>
+<nav><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a><a href="/">Dashboard</a></nav>
+${body}
+<hr>
+<p class="muted">Aegis Control is a Discord bot and dashboard. Contact the operator through
+<a href="https://github.com/N0tAqua/aegis-control/issues">the project issue tracker</a> or the support server linked on the dashboard.</p>
+</main></body></html>`,
+    { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600' } },
+  );
+}
+
+function legalPage(kind) {
+  if (kind === 'terms') {
+    return legalShell(
+      'Terms of Service',
+      `<p>These terms cover the Aegis Discord bot and the Aegis Control dashboard and desktop app that
+operate it (together, "Aegis"). By adding Aegis to a Discord server, using the dashboard, or using any
+command, you agree to these terms.</p>
+
+<h2>1. The service</h2>
+<p>Aegis is a self-hosted Discord management bot. The person or community running this instance
+("the operator") controls the bot, its data and its availability. The software is provided so a server
+owner can manage roles, moderation, tickets, events and community tools without opening Discord.</p>
+
+<h2>2. Acceptable use</h2>
+<ul>
+<li>Do not use Aegis to harass, dox, spam, or target people, or to break Discord's Terms of Service or Community Guidelines.</li>
+<li>Do not attempt to bypass rate limits, access controls, licence checks or another server's data.</li>
+<li>Do not run Aegis against servers you do not own or have permission to manage.</li>
+<li>Do not resell access to this instance as your own service.</li>
+</ul>
+
+<h2>3. Your responsibility</h2>
+<p>Moderation actions, mass role changes, panic mode and anti-nuke responses are triggered by server staff
+through Aegis. You are responsible for what you and your staff do with those tools, and for keeping
+your server's roles and permissions correct. Aegis applies exactly what it is told to apply.</p>
+
+<h2>4. Availability and changes</h2>
+<p>Aegis is provided "as is" and "as available", without warranties of any kind. Features may change,
+break, or be removed; Discord may change its API; the operator may pause or shut down the instance.
+Nothing here guarantees uptime, data retention or a particular feature.</p>
+
+<h2>5. Data and privacy</h2>
+<p>How data is handled is described in the <a href="/privacy">Privacy Policy</a>.</p>
+
+<h2>6. Suspension</h2>
+<p>The operator may refuse or revoke access, remove the bot from a server, or disable an account or key
+at any time, especially when these terms are broken or the instance is being abused.</p>
+
+<h2>7. Changes to these terms</h2>
+<p>These terms may be updated as the software changes. The date at the top shows the latest version.
+Continuing to use Aegis after a change means you accept the updated terms.</p>
+
+<h2>8. Contact</h2>
+<p>Questions about these terms: open an issue at
+<a href="https://github.com/N0tAqua/aegis-control/issues">github.com/N0tAqua/aegis-control</a>.
+For a hosted instance, contact the operator through the support server listed on its dashboard.</p>`,
+    );
+  }
+
+  return legalShell(
+    'Privacy Policy',
+    `<p>This policy explains what Aegis stores, why, and how to get it removed. Aegis is self-hosted:
+the operator of this instance is the data controller, not Discord and not the software authors.</p>
+
+<h2>1. What Aegis stores</h2>
+<ul>
+<li><b>Discord identifiers:</b> server, channel, role and user IDs, plus usernames and display names where a feature needs to show them.</li>
+<li><b>Server configuration:</b> feature settings, log channel choices, shop items, event RSVPs, ticket and giveaway records, and role/channel backups you create.</li>
+<li><b>Activity counts:</b> numbers of messages per channel and per day, voice minutes, and last-active times. Aegis does not store message bodies unless a feature you enable needs them, such as ticket transcripts.</li>
+<li><b>Moderation records:</b> punishment cases, anti-nuke incidents, panic-mode snapshots of channel permissions, and staff activity counters.</li>
+<li><b>Account data:</b> dashboard accounts, password hashes, licence keys tied to accounts, and session tokens.</li>
+<li><b>Event data:</b> RSVPs, check-ins and no-show lists for events you create.</li>
+</ul>
+
+<h2>2. Where it is stored</h2>
+<p>On the operator's own host (for example a SQLite file on the machine running the bot) and, if the operator
+hosts the dashboard separately, in that instance's database. Data is not sold, and it is not shared with
+advertisers or data brokers.</p>
+
+<h2>3. Why it is stored</h2>
+<p>Only to run the features you enable: moderation, logs, tickets, giveaways, temp voice, role management,
+server tools, levels/currency, events, stat counters and reports. Some features also send short prompts to
+an AI provider when the operator configures an AI key (announcements, reports, the copilot). In that case the
+prompt text and your request are sent to that provider under its own terms; message history is not sent.</p>
+
+<h2>4. Who can see it</h2>
+<p>Server owners and staff with the relevant dashboard permission can see their server's data. The operator
+of the instance can access the underlying files and database. Discord itself processes data under its own
+privacy policy when the bot uses its API.</p>
+
+<h2>5. Retention</h2>
+<p>Data stays until it is deleted: server owners can clear it with the relevant command or by removing the bot,
+and the operator can remove stored data at any time. Backups you create persist until you delete them.
+Activity counters older than the configured retention window are removed automatically.</p>
+
+<h2>6. Your choices</h2>
+<p>You can ask a server owner or the operator to show, correct or delete data linked to your Discord account.
+Use the support server linked on the dashboard, or open an issue at
+<a href="https://github.com/N0tAqua/aegis-control/issues">github.com/N0tAqua/aegis-control</a>.
+Removing the bot from a server stops new collection for that server.</p>
+
+<h2>7. Children</h2>
+<p>Aegis is not directed at children under 13 (or the minimum age required by Discord in your country).
+Do not use it if you are below that age.</p>
+
+<h2>8. Security</h2>
+<p>Access to the dashboard requires an account, and licence keys and sessions are stored hashed where possible.
+No system is perfectly secure; report a problem privately through the issue tracker rather than publicly.</p>
+
+<h2>9. Changes</h2>
+<p>This policy may be updated as the software changes. The date at the top shows the latest version.</p>`,
+  );
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -3028,6 +3289,12 @@ export default {
       }
       if (url.pathname === '/link' || url.pathname === '/link/') {
         return linkPage();
+      }
+      if (url.pathname === '/terms' || url.pathname === '/terms/') {
+        return legalPage('terms');
+      }
+      if (url.pathname === '/privacy' || url.pathname === '/privacy/') {
+        return legalPage('privacy');
       }
       if (env.ASSETS) return env.ASSETS.fetch(request);
       return json({ service: 'aegis' });

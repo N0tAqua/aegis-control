@@ -30,7 +30,7 @@ export function aiConfigured() {
   return Boolean(aiSettings().key);
 }
 
-async function askModel(system, prompt, { maxTokens = 700, temperature = 0.7 } = {}) {
+export async function askModel(system, prompt, { maxTokens = 700, temperature = 0.7 } = {}) {
   const settings = aiSettings();
   if (!settings.key) return { ok: false, reason: 'no-key' };
   try {

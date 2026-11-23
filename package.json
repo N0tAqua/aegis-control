@@ -1,6 +1,6 @@
 {
   "name": "aegis-control",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "private": true,
   "type": "module",
   "description": "Aegis Control: a desktop dashboard for the Aegis Discord protection bot",
@@ -19,7 +19,7 @@
     "dist": "electron-builder --win portable",
     "release": "node scripts/publish-release.mjs",
     "login-check": "node scripts/login-check.mjs",
-    "check": "node --check index.js && node --check electron/main.js && node --check electron/auth.js && node --check electron/updater.js && node --check electron/config.js && node --check src/bot.js && node --check src/index.js && node --check src/commands.js && node --check src/deploy-commands.js && node --check renderer/app.js && node --check server/worker.js && node --check scripts/publish-release.mjs && node --check scripts/bot-host.mjs && node --check scripts/login-check.mjs && node --check scripts/selfhost.mjs && node --check server/node/server.mjs && node --check server/node/sqlite-d1.mjs && node --check server/node/files-r2.mjs && node --check server/node/assets.mjs && node --check src/features/store.js && node --check src/features/util.js && node --check src/features/logging.js && node --check src/features/reaction-roles.js && node --check src/features/tickets.js && node --check src/features/embeds.js && node --check src/features/giveaways.js && node --check src/features/temp-voice.js && node --check src/features/backup.js && node --check src/features/staff.js && node --check src/features/intel.js && node --check src/features/matchmaking.js && node --check src/features/ai.js && node --check src/features/index.js && node --check src/features/commands.js"
+    "check": "node --check index.js && node --check electron/main.js && node --check electron/auth.js && node --check electron/updater.js && node --check electron/config.js && node --check src/bot.js && node --check src/index.js && node --check src/commands.js && node --check src/deploy-commands.js && node --check renderer/app.js && node --check server/worker.js && node --check scripts/publish-release.mjs && node --check scripts/bot-host.mjs && node --check scripts/login-check.mjs && node --check scripts/selfhost.mjs && node --check server/node/server.mjs && node --check server/node/sqlite-d1.mjs && node --check server/node/files-r2.mjs && node --check server/node/assets.mjs && node --check src/features/store.js && node --check src/features/util.js && node --check src/features/logging.js && node --check src/features/reaction-roles.js && node --check src/features/tickets.js && node --check src/features/embeds.js && node --check src/features/giveaways.js && node --check src/features/temp-voice.js && node --check src/features/backup.js && node --check src/features/staff.js && node --check src/features/intel.js && node --check src/features/matchmaking.js && node --check src/features/ai.js && node --check src/features/index.js && node --check src/features/commands.js && node --check src/features/panic.js && node --check src/features/nuke.js && node --check src/features/doctor.js && node --check src/features/economy.js && node --check src/features/events.js && node --check src/features/stats.js && node --check src/features/copilot.js && node --check src/features/ops.js"
   },
   "dependencies": {
     "discord.js": "^14.16.3",

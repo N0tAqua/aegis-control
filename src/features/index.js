@@ -15,6 +15,12 @@ import {
 } from './staff.js';
 import { recordMemberActivity, recordMessageActivity, scanGuild } from './intel.js';
 import { handleAiComponent, sweepAiReports } from './ai.js';
+import { handleCopilotComponent } from './copilot.js';
+import { handleEventComponent, sweepEvents } from './events.js';
+import { handleEconomyComponent, recordEconomyMessage, trackEconomyVoice } from './economy.js';
+import { quarantineNewMember } from './panic.js';
+import { registerNukeGuard } from './nuke.js';
+import { sweepStats } from './stats.js';
 
 function isComponent(interaction) {
   return (
@@ -57,6 +63,8 @@ export class FeatureManager {
 
     // Giveaways need a short tick so they end close to their deadline.
     this.addTimer(setInterval(() => this.sweepGiveaways().catch(() => {}), 20_000));
+    this.addTimer(setInterval(() => this.sweepEvents().catch(() => {}), 30_000));
+    this.addTimer(setInterval(() => this.sweepStats().catch(() => {}), 10 * 60_000));
     this.addTimer(setInterval(() => this.sweepSlow().catch(() => {}), 5 * 60_000));
   }
 
@@ -79,12 +87,14 @@ export class FeatureManager {
   register(client) {
     registerLogging(this, client);
     registerStaffTracking(this, client);
+    registerNukeGuard(this, client);
 
     client.on(Events.MessageCreate, (message) => {
       try {
         recordMessageActivity(this, message);
         trackStaffMessage(this, message);
         trackTicketMessage(this, message);
+        recordEconomyMessage(this, message);
       } catch (error) {
         this.bot?.log('warn', `Feature message tracking failed: ${error.message}`);
       }
@@ -93,6 +103,7 @@ export class FeatureManager {
     client.on(Events.GuildMemberAdd, (member) => {
       try {
         recordMemberActivity(this, member.guild.id, 'join', member);
+        quarantineNewMember(this, member).catch(() => {});
       } catch (error) {
         this.bot?.log('warn', `Join tracking failed: ${error.message}`);
       }
@@ -109,6 +120,7 @@ export class FeatureManager {
     client.on(Events.VoiceStateUpdate, (oldState, newState) => {
       try {
         trackStaffVoice(this, oldState, newState);
+        trackEconomyVoice(this, oldState, newState);
       } catch {
         // Voice stats are best-effort.
       }
@@ -126,7 +138,10 @@ export class FeatureManager {
           (await handleGiveawayComponent(this, interaction)) ||
           (await handleTempVoiceComponent(this, interaction)) ||
           (await handleBackupComponent(this, interaction)) ||
-          (await handleAiComponent(this, interaction));
+          (await handleAiComponent(this, interaction)) ||
+          (await handleEconomyComponent(this, interaction)) ||
+          (await handleEventComponent(this, interaction)) ||
+          (await handleCopilotComponent(this, interaction));
         if (!handled) {
           await interaction.reply({ content: 'That control is no longer in use.', flags: 64 }).catch(() => {});
         }
@@ -144,7 +159,7 @@ export class FeatureManager {
     this.recovering = true;
     try {
       await resumeTempVoice(this);
-      this.bot?.log('info', 'Community features ready: tickets, roles, giveaways, voice, backups, intel, matchmaking, AI.');
+      this.bot?.log('info', 'Community features ready: tickets, roles, giveaways, voice, backups, intel, matchmaking, AI, panic, anti-nuke, doctor, economy, events, stats, copilot.');
     } finally {
       this.recovering = false;
     }
@@ -153,6 +168,16 @@ export class FeatureManager {
   async sweepGiveaways() {
     if (!this.client) return;
     await sweepGiveaways(this);
+  }
+
+  async sweepEvents() {
+    if (!this.client) return;
+    await sweepEvents(this);
+  }
+
+  async sweepStats() {
+    if (!this.client) return;
+    await sweepStats(this);
   }
 
   async sweepSlow() {

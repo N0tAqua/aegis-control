@@ -484,6 +484,19 @@ function registerIpc(authStore) {
     return authStore.roleTask(String(id ?? ''));
   });
 
+  ipcMain.handle('tools:state', async (_event, guildId) => {
+    authStore.requirePermission('manageBot');
+    return authStore.featureState(String(guildId ?? ''));
+  });
+  ipcMain.handle('tools:action', async (_event, payload) => {
+    authStore.requirePermission('manageBot');
+    return authStore.featureAction(payload ?? {});
+  });
+  ipcMain.handle('tools:task', async (_event, id) => {
+    authStore.requireSession();
+    return authStore.featureTask(String(id ?? ''));
+  });
+
   ipcMain.handle('auth:keys:list', () => {
     authStore.requirePermission('manageKeys');
     return authStore.listKeys();

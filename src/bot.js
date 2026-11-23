@@ -12,6 +12,7 @@ import {
 } from 'discord.js';
 import { commands, commandsByName } from './commands.js';
 import { FeatureManager } from './features/index.js';
+import { featureSnapshot, runFeatureTask } from './features/ops.js';
 
 const DEDUPE_MS = 2000;
 
@@ -1206,6 +1207,20 @@ export class BotManager extends EventEmitter {
       canManageRoles: live ? Boolean(me?.permissions.has(PermissionFlagsBits.ManageRoles)) : null,
       members: memberEntries,
     };
+  }
+
+  /** Dashboard actions (panic, guard, doctor, shop, events, stats, copilot). */
+  async runFeatureTask(task) {
+    if (!this.client?.isReady?.()) {
+      throw new Error('Aegis is not connected to Discord yet.');
+    }
+    return runFeatureTask(this.features, task);
+  }
+
+  featureSnapshot(guildId) {
+    const guild = this.client?.guilds?.cache?.get(String(guildId ?? ''));
+    if (!guild) throw new Error('Aegis is not in that server.');
+    return featureSnapshot(this.features, guild);
   }
 
   getStatus() {

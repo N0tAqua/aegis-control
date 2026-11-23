@@ -159,6 +159,9 @@
           <button class="nav-item" data-goto="roles">
             <span class="nav-icon">⌗</span> Roles
           </button>
+          <button class="nav-item" data-goto="tools">
+            <span class="nav-icon">✦</span> Server tools
+          </button>
           <button class="nav-item" data-goto="access">
             <span class="nav-icon">✓</span> Access
           </button>
@@ -318,6 +321,120 @@
               </div>
               <div class="empty" id="roles-empty">Loading roles…</div>
               <div class="role-list" id="role-list"></div>
+            </div>
+          </section>
+
+          <section class="page" data-page="tools">
+            <div class="card">
+              <div class="card-head">
+                <h2>Server tools</h2>
+                <span class="muted" id="tools-note"></span>
+              </div>
+              <p class="muted small">
+                Panic mode, the anti-nuke guard, the server doctor, the coin shop, events, stat counters
+                and the copilot. Every action is queued for the host runner and applied inside Discord.
+              </p>
+              <div class="inline-form">
+                <select class="role-select" id="tools-guild"></select>
+                <span class="muted small" id="tools-updated"></span>
+              </div>
+
+              <div class="tool-tabs" id="tool-tabs">
+                <button class="tool-tab active" type="button" data-tool="panic">🚨 Panic</button>
+                <button class="tool-tab" type="button" data-tool="guard">🛡️ Guard</button>
+                <button class="tool-tab" type="button" data-tool="doctor">🩺 Doctor</button>
+                <button class="tool-tab" type="button" data-tool="coins">💰 Coins</button>
+                <button class="tool-tab" type="button" data-tool="events">📅 Events</button>
+                <button class="tool-tab" type="button" data-tool="stats">📊 Stats</button>
+                <button class="tool-tab" type="button" data-tool="copilot">🧠 Copilot</button>
+              </div>
+
+              <div class="tool-panel active" data-tool-panel="panic">
+                <div class="tool-status" id="panic-state">—</div>
+                <div class="inline-form">
+                  <input id="panic-reason" placeholder="Reason (optional)" maxlength="200" autocomplete="off" />
+                  <select id="panic-role"><option value="">No quarantine role</option></select>
+                  <input id="panic-window" type="number" min="1" max="10080" value="60" title="Quarantine joins from the last N minutes" />
+                  <button class="btn btn-primary" id="panic-on" type="button">Lock server</button>
+                  <button class="btn btn-ghost" id="panic-off" type="button">Restore</button>
+                </div>
+                <div class="tool-list" id="panic-timeline"></div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="guard">
+                <div class="tool-status" id="guard-state">—</div>
+                <div class="inline-form">
+                  <label class="chip"><input type="checkbox" id="guard-enabled" /> Guard on</label>
+                  <label class="chip">Actions <input id="guard-threshold" type="number" min="2" max="20" value="3" /></label>
+                  <label class="chip">Window (s) <input id="guard-window" type="number" min="10" max="600" value="60" /></label>
+                  <select id="guard-channel"><option value="">Moderation log channel</option></select>
+                  <button class="btn btn-primary" id="guard-save" type="button">Save</button>
+                </div>
+                <div class="tool-list" id="guard-incidents"></div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="doctor">
+                <div class="tool-status" id="doctor-state">—</div>
+                <div class="inline-form">
+                  <button class="btn btn-primary" id="doctor-run" type="button">Run audit</button>
+                </div>
+                <div class="tool-list" id="doctor-checks"></div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="coins">
+                <div class="inline-form">
+                  <label class="chip"><input type="checkbox" id="coins-enabled" /> Earning on</label>
+                  <label class="chip">Per message <input id="coins-message" type="number" min="0" max="100" value="3" /></label>
+                  <label class="chip">Per voice min <input id="coins-voice" type="number" min="0" max="100" value="2" /></label>
+                  <label class="chip">Cooldown (s) <input id="coins-cooldown" type="number" min="0" max="3600" value="45" /></label>
+                  <button class="btn btn-primary" id="coins-save" type="button">Save</button>
+                </div>
+                <div class="tool-list" id="shop-items"></div>
+                <div class="inline-form" style="margin-top: 12px">
+                  <select id="shop-role"><option value="">Choose a role</option></select>
+                  <input id="shop-name" placeholder="Shop label" maxlength="80" autocomplete="off" />
+                  <input id="shop-price" type="number" min="0" value="100" title="Price in coins" />
+                  <input id="shop-stock" type="number" min="0" value="0" title="Stock, 0 = unlimited" />
+                  <button class="btn btn-primary" id="shop-add" type="button">Add reward</button>
+                </div>
+                <div class="tool-list" id="coins-top"></div>
+                <div class="inline-form" style="margin-top: 12px">
+                  <input id="coins-user" placeholder="Member ID" autocomplete="off" />
+                  <input id="coins-amount" type="number" min="1" value="100" />
+                  <button class="btn btn-ghost" id="coins-give" type="button">Add coins</button>
+                </div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="events">
+                <div class="inline-form">
+                  <input id="event-title" placeholder="Event title" maxlength="100" autocomplete="off" />
+                  <input id="event-starts" placeholder="Starts in, e.g. 2h" maxlength="20" autocomplete="off" value="2h" />
+                  <select id="event-channel"><option value="">Event channel</option></select>
+                  <input id="event-capacity" type="number" min="0" value="0" title="Capacity, 0 = unlimited" />
+                  <button class="btn btn-primary" id="event-create" type="button">Create event</button>
+                </div>
+                <div class="tool-list" id="event-list"></div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="stats">
+                <div class="tool-status" id="stats-state">—</div>
+                <div class="inline-form">
+                  <input id="stats-category" placeholder="Category name" value="📊 Server Stats" maxlength="90" autocomplete="off" />
+                  <button class="btn btn-primary" id="stats-setup" type="button">Create counters</button>
+                  <button class="btn btn-ghost" id="stats-off" type="button">Remove</button>
+                </div>
+                <div class="tool-list" id="stats-list"></div>
+              </div>
+
+              <div class="tool-panel" data-tool-panel="copilot">
+                <p class="muted small" id="copilot-hint">Describe a change, review the plan, then apply it.</p>
+                <textarea id="copilot-request" rows="3" placeholder="create a tournament category with info, rules and chat"></textarea>
+                <div class="inline-form" style="margin-top: 10px">
+                  <button class="btn btn-primary" id="copilot-plan" type="button">Make a plan</button>
+                  <button class="btn btn-ghost" id="copilot-apply" type="button" hidden>Apply changes</button>
+                </div>
+                <div class="tool-list" id="copilot-output"></div>
+              </div>
             </div>
           </section>
 

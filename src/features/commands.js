@@ -9,6 +9,13 @@ import { commands as staff } from './staff.js';
 import { commands as intel } from './intel.js';
 import { commands as matchmaking } from './matchmaking.js';
 import { commands as ai } from './ai.js';
+import { commands as panic } from './panic.js';
+import { commands as antinuke } from './nuke.js';
+import { commands as doctor } from './doctor.js';
+import { commands as economy } from './economy.js';
+import { commands as events } from './events.js';
+import { commands as stats } from './stats.js';
+import { commands as copilot } from './copilot.js';
 
 export const featureCommands = [
   ...logging,
@@ -22,4 +29,11 @@ export const featureCommands = [
   ...intel,
   ...matchmaking,
   ...ai,
+  ...panic,
+  ...antinuke,
+  ...doctor,
+  ...economy,
+  ...events,
+  ...stats,
+  ...copilot,
 ];

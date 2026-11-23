@@ -343,6 +343,19 @@ export class AuthStore {
     return this.request(`/api/roles/task/${encodeURIComponent(id)}`);
   }
 
+  async featureState(guildId = '') {
+    const query = guildId ? `?guild=${encodeURIComponent(guildId)}` : '';
+    return this.request(`/api/features${query}`);
+  }
+
+  async featureAction(payload = {}) {
+    return this.request('/api/features', { method: 'POST', body: payload });
+  }
+
+  async featureTask(id) {
+    return this.request(`/api/features/task/${encodeURIComponent(id)}`);
+  }
+
   async listKeys() {
     const data = await this.request('/api/keys');
     return data.keys ?? [];

@@ -32,6 +32,7 @@ const PAGE_META = {
   overview: ['Overview', 'Live status of Aegis and your servers.'],
   servers: ['Servers', 'Server-wide protection, per-member rules and sticky force mute/deafen.'],
   roles: ['Roles', 'Create, edit, reorder and delete roles without opening Discord.'],
+  tools: ['Server tools', 'Panic mode, anti-nuke, audits, coins, events, stats and the copilot.'],
   access: ['Access', 'Choose exactly which Discord users can control Aegis.'],
   console: ['Console', 'Run Aegis commands without leaving the dashboard.'],
   activity: ['Activity', 'Everything Aegis has done since the dashboard opened.'],
@@ -56,6 +57,8 @@ const state = {
   expanded: new Set(),
   roles: null,
   roleEdit: null,
+  tools: null,
+  toolPlan: null,
   authView: 'login',
   update: null,
   offlineNotified: false,
@@ -1260,9 +1263,10 @@ function renderAll() {
 
 function setPage(page) {
   const roomPage = state.room ? 'overview' : 'room';
-  if (!['room', 'settings', 'roles'].includes(page) && !state.room) page = 'room';
+  if (!['room', 'settings', 'roles', 'tools'].includes(page) && !state.room) page = 'room';
   if (page === 'licenses' && !can('manageKeys')) page = roomPage;
   if (page === 'roles' && !can('manageBot')) page = roomPage;
+  if (page === 'tools' && !can('manageBot')) page = roomPage;
   if (page === 'console' && (!can('useConsole') || state.linked)) page = roomPage;
   if (page === 'activity' && !can('viewLogs')) page = roomPage;
 
@@ -1280,6 +1284,7 @@ function setPage(page) {
   if (page === 'console') $('console-input').focus();
   if (page === 'licenses') loadKeys();
   if (page === 'roles') loadRoles();
+  if (page === 'tools') loadTools();
   if (page === 'room') {
     loadRooms();
     loadSocial();
@@ -2299,6 +2304,290 @@ async function addAllRoles() {
   }
 }
 
+/* ------------------------------------------------------------ server tools --- */
+
+function toolEl(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function toolButton(label, onClick, className = 'btn btn-ghost btn-small') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      await onClick();
+    } catch (error) {
+      toast(cleanError(error), 'err');
+    } finally {
+      button.disabled = false;
+    }
+  });
+  return button;
+}
+
+function fillToolSelect(node, placeholder, items, selected) {
+  const signature = `${placeholder}:${items.map((item) => `${item.id}=${item.name}`).join(',')}`;
+  if (node.dataset.signature === signature) {
+    node.value = selected ?? '';
+    return;
+  }
+  node.replaceChildren();
+  if (placeholder !== null) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = placeholder;
+    node.append(option);
+  }
+  for (const item of items) {
+    const option = document.createElement('option');
+    option.value = item.id;
+    option.textContent = item.name;
+    node.append(option);
+  }
+  node.dataset.signature = signature;
+  node.value = selected ?? '';
+}
+
+async function loadTools(guildId) {
+  if (!can('manageBot')) return;
+  try {
+    state.tools = await api.tools.state(guildId ?? state.tools?.guildId ?? '');
+    renderTools();
+  } catch (error) {
+    $('tools-note').textContent = cleanError(error);
+  }
+}
+
+async function runToolTask(action, payload = {}, { reload = true } = {}) {
+  const { id } = await api.tools.action({ action, guildId: state.tools?.guildId, payload });
+  const deadline = Date.now() + 30_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const task = await api.tools.task(id).catch(() => null);
+    if (!task) continue;
+    if (task.status === 'done') {
+      if (reload) await loadTools();
+      return task.result;
+    }
+    if (task.status === 'error') throw new Error(task.result?.error || 'That action failed in Discord.');
+  }
+  throw new Error('The host runner did not answer. Check that it is online.');
+}
+
+function renderTools() {
+  const data = state.tools;
+  if (!data) return;
+  const features = data.features ?? {};
+  const guilds = data.guilds ?? [];
+  const select = $('tools-guild');
+  const signature = `${data.guildId}:${guilds.map((guild) => guild.id).join(',')}`;
+  if (select.dataset.signature !== signature) {
+    select.replaceChildren(
+      ...guilds.map((guild) => {
+        const option = document.createElement('option');
+        option.value = guild.id;
+        option.textContent = guild.name;
+        option.selected = guild.id === data.guildId;
+        return option;
+      }),
+    );
+    select.dataset.signature = signature;
+  }
+  select.hidden = guilds.length < 2;
+  $('tools-note').textContent = data.guildName
+    ? `${data.guildName} · ${data.hostOnline ? 'runner online' : 'runner offline'}${data.updatedAt ? ` · ${new Date(data.updatedAt).toLocaleTimeString()}` : ''}`
+    : 'The bot has not reported a server yet.';
+
+  const roles = features.roles ?? [];
+  const channels = features.channels ?? [];
+  const textChannels = channels.filter((channel) => channel.type === 0);
+  fillToolSelect($('panic-role'), 'No quarantine role', roles, features.panic?.quarantineRoleId ?? '');
+  fillToolSelect($('guard-channel'), 'Moderation log channel', textChannels, features.guard?.channelId ?? '');
+  fillToolSelect($('shop-role'), 'Choose a role', roles);
+  fillToolSelect($('event-channel'), 'Event channel', textChannels);
+
+  renderPanicTool(features);
+  renderGuardTool(features);
+  renderDoctorTool(features);
+  renderCoinsTool(features);
+  renderEventsTool(features);
+  renderStatsTool(features);
+  $('copilot-hint').textContent = features.ai
+    ? 'Describe a change, review the plan, then apply it.'
+    : 'AI key not set on the host runner, so the copilot only understands simple requests (categories, channels, roles, panic mode, stat counters).';
+}
+
+function renderPanicTool(features) {
+  const panic = features.panic ?? {};
+  const node = $('panic-state');
+  node.textContent = panic.active
+    ? `LOCKED since ${new Date(panic.startedAt).toLocaleTimeString()} by ${panic.by ?? 'dashboard'} · ${panic.channels} channel(s)${panic.quarantined ? ` · ${panic.quarantined} quarantined` : ''}`
+    : panic.endedAt
+      ? `Off · last used ${new Date(panic.endedAt).toLocaleString()}`
+      : 'Off · ready';
+  node.classList.toggle('danger', Boolean(panic.active));
+  $('panic-window').value = Math.round((panic.joinWindowMs ?? 3_600_000) / 60_000);
+  const list = $('panic-timeline');
+  list.replaceChildren();
+  for (const entry of [...(panic.timeline ?? [])].reverse()) {
+    list.append(toolEl('div', 'tool-item', `${new Date(entry.at).toLocaleTimeString()} — ${entry.text}`));
+  }
+  for (const failure of panic.failed ?? []) {
+    list.append(toolEl('div', 'tool-item danger', failure));
+  }
+}
+
+function renderGuardTool(features) {
+  const guard = features.guard ?? {};
+  $('guard-enabled').checked = Boolean(guard.enabled);
+  $('guard-threshold').value = guard.threshold ?? 3;
+  $('guard-window').value = Math.round((guard.windowMs ?? 60_000) / 1000);
+  $('guard-state').textContent = guard.enabled
+    ? `On · ${guard.threshold} actions in ${Math.round(guard.windowMs / 1000)}s · ${(guard.trustedRoles ?? []).length} trusted role(s)`
+    : 'Off · destructive staff actions are not watched';
+  $('guard-state').classList.toggle('danger', Boolean(guard.enabled));
+  const list = $('guard-incidents');
+  list.replaceChildren();
+  if (!(guard.incidents ?? []).length) {
+    list.append(toolEl('div', 'tool-item', 'No incidents recorded.'));
+    return;
+  }
+  for (const incident of guard.incidents) {
+    const row = toolEl('div', 'tool-item');
+    row.append(toolEl('span', '', `${new Date(incident.at).toLocaleString()} — ${incident.actorName} did ${incident.count}× ${incident.label}`));
+    row.append(toolEl('span', 'tool-badge', incident.removed?.length ? `stripped ${incident.removed.length} role(s)` : incident.note || 'no roles removed'));
+    list.append(row);
+  }
+}
+
+function renderDoctorTool(features) {
+  const doctor = features.doctor ?? {};
+  $('doctor-state').textContent = doctor.lastRunAt
+    ? `Health ${doctor.score}/100 (${doctor.grade}) · last audit ${new Date(doctor.lastRunAt).toLocaleString()}`
+    : 'No audit yet.';
+  const list = $('doctor-checks');
+  list.replaceChildren();
+  if (!doctor.lastRunAt) {
+    list.append(toolEl('div', 'tool-item', 'Run an audit to check permissions, leaks and dead channels.'));
+    return;
+  }
+  if (!(doctor.checks ?? []).length) {
+    list.append(toolEl('div', 'tool-item', 'Everything looks healthy.'));
+    return;
+  }
+  for (const check of doctor.checks) {
+    const row = toolEl('div', `tool-item ${check.severity === 'high' ? 'danger' : ''}`);
+    const body = toolEl('div', 'tool-body');
+    body.append(toolEl('strong', '', check.title));
+    body.append(toolEl('div', 'muted small', check.detail));
+    if (check.samples?.length) body.append(toolEl('div', 'muted small', check.samples.slice(0, 5).join(', ')));
+    row.append(body);
+    if (check.fix) {
+      row.append(
+        toolButton('Fix', async () => {
+          await runToolTask('doctor_fix', { kind: check.fix });
+          toast('Fix applied.');
+        }, 'btn btn-ghost btn-small'),
+      );
+    }
+    list.append(row);
+  }
+}
+
+function renderCoinsTool(features) {
+  const economy = features.economy ?? {};
+  $('coins-enabled').checked = economy.enabled !== false;
+  $('coins-message').value = economy.perMessage ?? 3;
+  $('coins-voice').value = economy.perVoiceMinute ?? 2;
+  $('coins-cooldown').value = economy.cooldownSec ?? 45;
+
+  const shop = $('shop-items');
+  shop.replaceChildren();
+  if (!(economy.items ?? []).length) shop.append(toolEl('div', 'tool-item', 'The shop is empty.'));
+  for (const item of economy.items ?? []) {
+    const row = toolEl('div', 'tool-item');
+    const name = toolEl('input', 'tool-inline-input');
+    name.value = item.name;
+    name.maxLength = 80;
+    const price = toolEl('input', 'tool-inline-number');
+    price.type = 'number';
+    price.min = '0';
+    price.value = item.price;
+    const stock = toolEl('input', 'tool-inline-number');
+    stock.type = 'number';
+    stock.min = '0';
+    stock.value = item.stock ?? 0;
+    const label = toolEl('span', 'muted small', 'coins / stock');
+    row.append(name, price, label, stock);
+    row.append(
+      toolButton('Save', async () => {
+        await runToolTask('shop_save', { itemId: item.id, roleId: item.roleId, name: name.value, price: price.value, stock: stock.value });
+        toast('Reward saved.');
+      }),
+      toolButton('Remove', async () => {
+        await runToolTask('shop_delete', { itemId: item.id });
+        toast('Reward removed.');
+      }, 'btn btn-ghost btn-small remove'),
+    );
+    shop.append(row);
+  }
+
+  const top = $('coins-top');
+  top.replaceChildren();
+  if (!(economy.top ?? []).length) top.append(toolEl('div', 'tool-item', 'Nobody has coins yet.'));
+  for (const row of economy.top ?? []) {
+    top.append(toolEl('div', 'tool-item', `${row.userId} — ${row.coins} coins`));
+  }
+}
+
+function renderEventsTool(features) {
+  const list = $('event-list');
+  list.replaceChildren();
+  const items = features.events?.items ?? [];
+  if (!items.length) {
+    list.append(toolEl('div', 'tool-item', 'No events yet.'));
+    return;
+  }
+  for (const item of items) {
+    const row = toolEl('div', 'tool-item');
+    const body = toolEl('div', 'tool-body');
+    body.append(toolEl('strong', '', item.title));
+    body.append(
+      toolEl(
+        'div',
+        'muted small',
+        `${new Date(item.startsAt).toLocaleString()} · ${item.going} going${item.waitlist ? ` · ${item.waitlist} waitlist` : ''} · ${item.status}`,
+      ),
+    );
+    row.append(body);
+    if (item.status !== 'cancelled') {
+      row.append(
+        toolButton('Cancel', async () => {
+          await runToolTask('event_cancel', { eventId: item.id });
+          toast('Event cancelled.');
+        }, 'btn btn-ghost btn-small remove'),
+      );
+    }
+    list.append(row);
+  }
+}
+
+function renderStatsTool(features) {
+  const stats = features.stats ?? {};
+  $('stats-state').textContent = stats.enabled
+    ? `On · ${Object.keys(stats.channels ?? {}).length} counter(s) · refreshed ${stats.lastRunAt ? new Date(stats.lastRunAt).toLocaleTimeString() : 'never'}`
+    : 'Off · no counter channels';
+  const list = $('stats-list');
+  list.replaceChildren();
+  for (const name of Object.values(stats.lastNames ?? {})) list.append(toolEl('div', 'tool-item', name));
+}
+
 /* ---------------------------------------------------------------- wiring --- */
 
 $('firstrun-continue').addEventListener('click', () => {
@@ -2513,6 +2802,264 @@ $('role-save').addEventListener('click', saveRole);
 $('role-cancel').addEventListener('click', () => {
   $('role-form').hidden = true;
   state.roleEdit = null;
+});
+
+/* ------------------------------------------------------------ tool wiring --- */
+
+function toolTab(name) {
+  for (const tab of document.querySelectorAll('.tool-tab')) {
+    tab.classList.toggle('active', tab.dataset.tool === name);
+  }
+  for (const panel of document.querySelectorAll('[data-tool-panel]')) {
+    panel.classList.toggle('active', panel.dataset.toolPanel === name);
+  }
+}
+
+for (const tab of document.querySelectorAll('.tool-tab')) {
+  tab.addEventListener('click', () => toolTab(tab.dataset.tool));
+}
+$('tools-guild').addEventListener('change', () => loadTools($('tools-guild').value));
+
+$('panic-on').addEventListener('click', async () => {
+  const button = $('panic-on');
+  button.disabled = true;
+  try {
+    const minutes = Math.max(1, Number($('panic-window').value) || 60);
+    await runToolTask('panic_on', {
+      reason: $('panic-reason').value.trim(),
+      quarantineRoleId: $('panic-role').value || null,
+      windowMs: minutes * 60_000,
+    });
+    toast('Panic mode is on.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('panic-off').addEventListener('click', async () => {
+  const button = $('panic-off');
+  button.disabled = true;
+  try {
+    await runToolTask('panic_off', {});
+    toast('Server restored.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('guard-save').addEventListener('click', async () => {
+  const button = $('guard-save');
+  button.disabled = true;
+  try {
+    await runToolTask('guard_update', {
+      enabled: $('guard-enabled').checked,
+      threshold: Number($('guard-threshold').value) || 3,
+      windowMs: (Number($('guard-window').value) || 60) * 1000,
+      channelId: $('guard-channel').value || null,
+    });
+    toast('Guard settings saved.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('doctor-run').addEventListener('click', async () => {
+  const button = $('doctor-run');
+  button.disabled = true;
+  try {
+    await runToolTask('doctor_run', {});
+    toast('Audit complete.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('coins-save').addEventListener('click', async () => {
+  const button = $('coins-save');
+  button.disabled = true;
+  try {
+    await runToolTask('economy_update', {
+      enabled: $('coins-enabled').checked,
+      perMessage: Number($('coins-message').value) || 0,
+      perVoiceMinute: Number($('coins-voice').value) || 0,
+      cooldownSec: Number($('coins-cooldown').value) || 0,
+    });
+    toast('Coin settings saved.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('shop-add').addEventListener('click', async () => {
+  const button = $('shop-add');
+  const roleId = $('shop-role').value;
+  if (!roleId) {
+    toast('Choose a role first.', 'err');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await runToolTask('shop_save', {
+      roleId,
+      name: $('shop-name').value.trim(),
+      price: Number($('shop-price').value) || 0,
+      stock: Number($('shop-stock').value) || 0,
+    });
+    $('shop-name').value = '';
+    toast('Reward added.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('coins-give').addEventListener('click', async () => {
+  const button = $('coins-give');
+  const userId = $('coins-user').value.trim();
+  if (!/^\d{17,20}$/.test(userId)) {
+    toast('Paste a Discord member ID.', 'err');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await runToolTask('coins_give', { userId, amount: Number($('coins-amount').value) || 1 });
+    $('coins-user').value = '';
+    toast('Coins added.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('event-create').addEventListener('click', async () => {
+  const button = $('event-create');
+  const title = $('event-title').value.trim();
+  const channelId = $('event-channel').value;
+  if (!title || !channelId) {
+    toast('Add an event title and pick a channel.', 'err');
+    return;
+  }
+  button.disabled = true;
+  try {
+    await runToolTask('event_create', {
+      title,
+      channelId,
+      startsIn: $('event-starts').value.trim() || '1h',
+      capacity: Number($('event-capacity').value) || 0,
+    });
+    $('event-title').value = '';
+    toast('Event posted in Discord.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('stats-setup').addEventListener('click', async () => {
+  const button = $('stats-setup');
+  button.disabled = true;
+  try {
+    await runToolTask('stats_setup', { categoryName: $('stats-category').value.trim() || '📊 Server Stats' });
+    toast('Counter channels created.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('stats-off').addEventListener('click', async () => {
+  const button = $('stats-off');
+  button.disabled = true;
+  try {
+    await runToolTask('stats_off', {});
+    toast('Counter channels removed.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+function copilotStepLabel(step) {
+  if (step.op === 'create_category') return `Create category ${step.name}`;
+  if (step.op === 'create_text') return `Create text channel #${step.name}${step.category ? ` in ${step.category}` : ''}`;
+  if (step.op === 'create_voice') return `Create voice channel ${step.name}${step.category ? ` in ${step.category}` : ''}`;
+  if (step.op === 'create_role') return `Create role ${step.name}`;
+  if (step.op === 'slowmode') return `Slowmode on ${step.channel || 'a channel'} → ${step.seconds}s`;
+  if (step.op === 'post_message') return `Post a message in ${step.channel || 'the first channel'}`;
+  if (step.op === 'panic') return step.on ? 'Turn on panic mode' : 'Turn off panic mode';
+  return 'Create the stat channels';
+}
+
+$('copilot-plan').addEventListener('click', async () => {
+  const button = $('copilot-plan');
+  const request = $('copilot-request').value.trim();
+  if (!request) {
+    toast('Describe what you want first.', 'err');
+    return;
+  }
+  button.disabled = true;
+  try {
+    const result = await runToolTask('copilot_plan', { request }, { reload: false });
+    state.toolPlan = result?.data?.result ?? null;
+    const plan = state.toolPlan?.steps ? state.toolPlan : null;
+    const list = $('copilot-output');
+    list.replaceChildren();
+    if (!plan || !plan.steps.length) {
+      list.append(toolEl('div', 'tool-item', state.toolPlan?.summary || 'The copilot could not turn that into changes.'));
+      $('copilot-apply').hidden = true;
+      return;
+    }
+    list.append(toolEl('div', 'tool-item', plan.summary));
+    plan.steps.forEach((step, index) => list.append(toolEl('div', 'tool-item', `${index + 1}. ${copilotStepLabel(step)}`)));
+    $('copilot-apply').hidden = false;
+    $('copilot-apply').dataset.plan = JSON.stringify(plan);
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$('copilot-apply').addEventListener('click', async () => {
+  const button = $('copilot-apply');
+  let plan = null;
+  try {
+    plan = JSON.parse(button.dataset.plan || 'null');
+  } catch {
+    plan = state.toolPlan;
+  }
+  if (!plan) return;
+  button.disabled = true;
+  try {
+    const result = await runToolTask('copilot_apply', { plan });
+    const steps = result?.data?.result?.steps ?? [];
+    const list = $('copilot-output');
+    list.replaceChildren();
+    for (const step of steps) {
+      list.append(toolEl('div', `tool-item ${step.ok ? '' : 'danger'}`, `${step.ok ? '✓' : '✕'} ${step.detail}`));
+    }
+    $('copilot-apply').hidden = true;
+    toast('Plan applied.');
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
 });
 
 for (const button of document.querySelectorAll('[data-goto]')) {
