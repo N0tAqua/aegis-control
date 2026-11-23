@@ -963,3 +963,86 @@ input::placeholder {
     width: 100%;
   }
 }
+
+/* ------------------------------------------------------------------ roles --- */
+
+.role-select {
+  background: rgba(8, 13, 24, 0.85);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  padding: 10px 12px;
+}
+
+.role-select:focus {
+  outline: none;
+  border-color: rgba(60, 232, 179, 0.5);
+}
+
+.role-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 14px;
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}
+
+.role-form .chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.role-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.role-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 14px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+}
+
+.role-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  min-width: 0;
+}
+
+.role-dot {
+  width: 11px;
+  height: 11px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+}
+
+.role-name {
+  font-size: 13px;
+}
+
+.role-meta {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.role-actions {
+  display: flex;
+  flex: none;
+  gap: 6px;
+}

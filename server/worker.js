@@ -563,6 +563,17 @@ const SCHEMA = [
     last_used_at INTEGER
   )`,
   `CREATE INDEX IF NOT EXISTS idx_web_tokens_account ON web_tokens (account_id)`,
+  `CREATE TABLE IF NOT EXISTS bot_tasks (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    guild_id TEXT,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    result TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_bot_tasks_status ON bot_tasks (status, created_at)`,
   `CREATE TABLE IF NOT EXISTS oauth_states (
     state TEXT PRIMARY KEY,
     mode TEXT NOT NULL,
@@ -910,6 +921,16 @@ async function setSetting(env, key, value) {
 // The host runner reports every five minutes so the site stays inside its
 // request allowance, so host presence has to be judged over a longer window.
 const NODE_ONLINE_MS = 420_000;
+
+/** Role snapshots the host runner pushes, keyed by guild id. */
+async function readRoleSnapshot(env) {
+  try {
+    const parsed = JSON.parse((await getSetting(env, 'bot_roles')) || '{}');
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 /** The bot itself runs on a host runner; here we only keep its last report. */
 async function readBotState(env) {
@@ -1594,6 +1615,74 @@ async function handleApi(request, env, url) {
       version: body?.version,
     });
     return json({ ok: true, count: crashes.length });
+  }
+
+  /* ---------------------------------------------------------------- roles ---
+   * The bot lives on the host runner, so the panel and the app do not talk to
+   * Discord themselves: they queue a task here, the runner executes it, and
+   * the answer comes back through /api/roles/task/<id>.
+   */
+
+  if (method === 'POST' && path === '/api/bot/host/roles') {
+    await requireHost(env, request);
+    const body = await readBody(request);
+    const guildId = String(body.guildId ?? '').trim();
+    if (!/^\d{17,20}$/.test(guildId)) bad('guildId must be a Discord server ID.');
+    const snapshot = await readRoleSnapshot(env);
+    snapshot[guildId] = {
+      guildName: String(body.guildName ?? '').slice(0, 120),
+      roles: Array.isArray(body.roles) ? body.roles.slice(0, 400) : [],
+      updatedAt: Date.now(),
+    };
+    await setSetting(env, 'bot_roles', JSON.stringify(snapshot));
+    return json({ ok: true, roles: snapshot[guildId].roles.length });
+  }
+
+  if (method === 'GET' && path === '/api/bot/host/tasks') {
+    await requireHost(env, request);
+    // Anything nobody collected in ten minutes is stale (the panel gave up).
+    // Sweeping on a fraction of polls keeps the write count down on D1.
+    if (Math.random() < 0.2) {
+      await env.DB.prepare('DELETE FROM bot_tasks WHERE created_at < ?')
+        .bind(Date.now() - 10 * 60_000)
+        .run();
+    }
+    const rows = await env.DB.prepare(
+      "SELECT id, action, guild_id, payload FROM bot_tasks WHERE status = 'pending' ORDER BY created_at LIMIT 5",
+    ).all();
+    const tasks = [];
+    for (const row of rows.results ?? []) {
+      const claimed = await env.DB.prepare(
+        "UPDATE bot_tasks SET status = 'running', updated_at = ? WHERE id = ? AND status = 'pending'",
+      )
+        .bind(Date.now(), row.id)
+        .run();
+      if (claimed.meta?.changes !== 1) continue;
+      let payload = {};
+      try {
+        payload = JSON.parse(row.payload);
+      } catch {
+        payload = {};
+      }
+      tasks.push({ id: row.id, action: row.action, guildId: row.guild_id, payload });
+    }
+    return json({ tasks });
+  }
+
+  if (method === 'POST' && path === '/api/bot/host/tasks') {
+    await requireHost(env, request);
+    const body = await readBody(request);
+    const id = String(body.id ?? '').trim();
+    if (!id) bad('A task id is required.');
+    const ok = body.ok !== false;
+    const result = {
+      ok,
+      error: ok ? null : String(body.error ?? 'That change failed.').slice(0, 300),
+    };
+    await env.DB.prepare('UPDATE bot_tasks SET status = ?, result = ?, updated_at = ? WHERE id = ?')
+      .bind(ok ? 'done' : 'error', JSON.stringify(result), Date.now(), id)
+      .run();
+    return json({ ok: true });
   }
 
   if (method === 'POST' && path === '/api/bot/host-token') {
@@ -2368,6 +2457,90 @@ async function handleApi(request, env, url) {
       .bind(raw, account.id, now)
       .run();
     return json({ ok: true, updatedAt: now });
+  }
+
+  if (method === 'GET' && path === '/api/roles') {
+    const state = await authenticate(env, request);
+    const account = requireAuth(state);
+    const botState = await readBotState(env);
+    const guilds = (botState.status?.guilds ?? []).map((guild) => ({ id: guild.id, name: guild.name }));
+    const snapshot = await readRoleSnapshot(env);
+    const wanted = url.searchParams.get('guild') || '';
+    const guildId = guilds.some((guild) => guild.id === wanted) ? wanted : (guilds[0]?.id ?? '');
+    const entry = snapshot[guildId] ?? {};
+    return json({
+      guilds,
+      guildId,
+      guildName: guilds.find((guild) => guild.id === guildId)?.name ?? null,
+      roles: Array.isArray(entry.roles) ? entry.roles : [],
+      updatedAt: entry.updatedAt ?? null,
+      canManage: hasScope(account, 'manageBot'),
+      hostOnline: botState.host.online,
+    });
+  }
+
+  if (method === 'POST' && path === '/api/roles') {
+    const state = await authenticate(env, request);
+    const account = requireAuth(state);
+    requireScope(account, 'manageBot');
+    const botState = await readBotState(env);
+    if (!botState.host.online) {
+      bad('The host runner is offline, so Discord cannot be reached right now.', 409);
+    }
+    const body = await readBody(request);
+    const action = String(body.action ?? '');
+    if (!['create', 'update', 'delete', 'move', 'refresh'].includes(action)) bad('Unknown role action.');
+    const guildId = String(body.guildId ?? '').trim();
+    if (!/^\d{17,20}$/.test(guildId)) bad('Choose a server first.');
+
+    const payload = { by: account.username };
+    if (action === 'create') {
+      payload.name = String(body.name ?? '').trim().slice(0, 100);
+      if (!payload.name) bad('Give the role a name.');
+      payload.color = body.color ?? null;
+      payload.hoist = Boolean(body.hoist);
+      payload.mentionable = Boolean(body.mentionable);
+    } else if (action !== 'refresh') {
+      const roleId = String(body.roleId ?? '').trim();
+      if (!/^\d{17,20}$/.test(roleId)) bad('Choose a role first.');
+      payload.roleId = roleId;
+      if (action === 'update') {
+        payload.name = String(body.name ?? '').trim().slice(0, 100);
+        payload.color = body.color ?? null;
+        payload.hoist = Boolean(body.hoist);
+        payload.mentionable = Boolean(body.mentionable);
+      }
+      if (action === 'move') payload.direction = body.direction === 'up' ? 'up' : 'down';
+    }
+
+    const id = crypto.randomUUID();
+    const now = Date.now();
+    await env.DB.prepare(
+      `INSERT INTO bot_tasks (id, action, guild_id, payload, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, 'pending', ?, ?)`,
+    )
+      .bind(id, action, guildId, JSON.stringify(payload), now, now)
+      .run();
+    return json({ id, queued: true });
+  }
+
+  const roleTaskMatch = path.match(/^\/api\/roles\/task\/([A-Za-z0-9-]+)$/);
+  if (roleTaskMatch && method === 'GET') {
+    const state = await authenticate(env, request);
+    requireAuth(state);
+    const row = await env.DB.prepare(
+      'SELECT status, result, updated_at FROM bot_tasks WHERE id = ?',
+    )
+      .bind(roleTaskMatch[1])
+      .first();
+    if (!row) bad('That change is no longer in the queue.', 404);
+    let result = null;
+    try {
+      result = row.result ? JSON.parse(row.result) : null;
+    } catch {
+      result = null;
+    }
+    return json({ id: roleTaskMatch[1], status: row.status, result, updatedAt: row.updated_at });
   }
 
   if (method === 'GET' && path === '/api/download/latest') {

@@ -38,6 +38,11 @@ const ALWAYS_RUN = /^(1|true|yes|on)$/i.test(String(process.env.AEGIS_ALWAYS_RUN
 // month), which leaves the rest of the allowance for the dashboard and the app.
 const POLL_MS = 60_000;
 const REPORT_MS = 300_000;
+// Role edits from the panel or the app are queued on the server; this is how
+// quickly the runner picks them up. Only polled while the bot is running, and
+// only on a host that runs its own server, so the allowance comment above does
+// not apply to it.
+const TASK_MS = 5_000;
 
 if (!HOST_TOKEN) {
   console.error(
@@ -157,6 +162,7 @@ async function startBot() {
   try {
     runnerError = null;
     await bot.start(DISCORD_TOKEN);
+    await pushRoles().catch(() => {});
   } catch (error) {
     runnerError = error.message;
     record('error', error.message);
@@ -174,6 +180,61 @@ async function stopBot() {
     record('warn', `Stop warning: ${error.message}`);
   } finally {
     stopping = false;
+  }
+}
+
+async function pushRoles(guildIds) {
+  if (!bot.getStatus().running) return;
+  const ids = guildIds?.length
+    ? guildIds
+    : (bot.getStatus().guilds ?? []).map((guild) => guild.id);
+  for (const guildId of ids) {
+    try {
+      const snapshot = bot.listRoles(guildId);
+      await api('/api/bot/host/roles', {
+        method: 'POST',
+        body: {
+          guildId,
+          guildName: snapshot.guildName,
+          roles: snapshot.roles,
+        },
+      });
+    } catch (error) {
+      record('warn', `Could not publish roles for ${guildId}: ${error.message}`);
+    }
+  }
+}
+
+async function runRolesTask(task) {
+  const guildId = String(task.guildId ?? '');
+  const payload = task.payload ?? {};
+  try {
+    if (task.action === 'create') await bot.createRole(guildId, payload);
+    else if (task.action === 'update') await bot.updateRole(guildId, payload.roleId, payload);
+    else if (task.action === 'delete') await bot.deleteRole(guildId, payload.roleId, payload);
+    else if (task.action === 'move') await bot.moveRole(guildId, payload.roleId, payload.direction, payload);
+    else if (task.action === 'refresh') await pushRoles([guildId]);
+    else throw new Error(`Unknown role action "${task.action}".`);
+    await api('/api/bot/host/tasks', { method: 'POST', body: { id: task.id, ok: true } });
+    await pushRoles([guildId]);
+  } catch (error) {
+    record('warn', `Role change failed: ${error.message}`);
+    await api('/api/bot/host/tasks', {
+      method: 'POST',
+      body: { id: task.id, ok: false, error: error.message },
+    }).catch(() => {});
+  }
+}
+
+async function pollTasks() {
+  if (!bot.getStatus().running) return;
+  try {
+    const data = await api('/api/bot/host/tasks');
+    for (const task of data.tasks ?? []) await runRolesTask(task);
+  } catch (error) {
+    if (error.status === 401 || error.status === 403) {
+      record('error', `Role task poll rejected: ${error.message}`);
+    }
   }
 }
 
@@ -233,10 +294,12 @@ async function report() {
     }
   }
   await flushCrashes().catch(() => {});
+  if (status.running) await pushRoles().catch(() => {});
 }
 
 let pollTimer = null;
 let reportTimer = null;
+let taskTimer = null;
 let closed = false;
 
 async function shutdown(signal) {
@@ -244,6 +307,7 @@ async function shutdown(signal) {
   closed = true;
   clearInterval(pollTimer);
   clearInterval(reportTimer);
+  clearInterval(taskTimer);
   console.log(`\n${signal} received — stopping the bot…`);
   await bot.stop().catch(() => {});
   process.exit(0);
@@ -286,3 +350,4 @@ if (!ALWAYS_RUN && !reachable && desired === 'running') {
 }
 pollTimer = setInterval(poll, POLL_MS);
 reportTimer = setInterval(report, REPORT_MS);
+taskTimer = setInterval(pollTasks, TASK_MS);

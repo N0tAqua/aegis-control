@@ -20,6 +20,12 @@ contextBridge.exposeInMainWorld('aegis', {
     },
   },
 
+  roles: {
+    list: (guildId) => ipcRenderer.invoke('roles:list', guildId),
+    action: (payload) => ipcRenderer.invoke('roles:action', payload),
+    task: (id) => ipcRenderer.invoke('roles:task', id),
+  },
+
   getInfo: () => ipcRenderer.invoke('app:info'),
   copyText: (text) => ipcRenderer.invoke('app:copy', text),
   showAppFile: () => ipcRenderer.invoke('app:showAppFile'),

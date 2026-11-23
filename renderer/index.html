@@ -156,6 +156,9 @@
           <button class="nav-item" data-goto="servers">
             <span class="nav-icon">▤</span> Servers
           </button>
+          <button class="nav-item" data-goto="roles">
+            <span class="nav-icon">⌗</span> Roles
+          </button>
           <button class="nav-item" data-goto="access">
             <span class="nav-icon">✓</span> Access
           </button>
@@ -281,6 +284,40 @@
                 <b>Manage Roles</b>, with its role above the members and roles it manages.
               </p>
               <div id="server-list" class="server-list"></div>
+            </div>
+          </section>
+
+          <section class="page" data-page="roles">
+            <div class="card">
+              <div class="card-head">
+                <h2>Roles</h2>
+                <span class="muted" id="roles-note"></span>
+              </div>
+              <p class="muted small">
+                Every role in your server, highest first. Move roles up and down, rename them, change
+                their colour, or create and delete them without opening Discord. Aegis needs
+                <b>Manage Roles</b>, and its own role above the roles it changes.
+              </p>
+              <div class="inline-form">
+                <select class="role-select" id="roles-guild"></select>
+                <button class="btn btn-ghost" id="roles-add-all" type="button">Add all</button>
+                <button class="btn btn-primary" id="roles-new" type="button">New role</button>
+              </div>
+              <div class="role-form" id="role-form" hidden>
+                <input id="role-name" placeholder="Role name" maxlength="100" autocomplete="off" />
+                <input
+                  id="role-color"
+                  placeholder="Colour, e.g. #5865f2"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <label class="chip"><input type="checkbox" id="role-hoist" /> Show separately</label>
+                <label class="chip"><input type="checkbox" id="role-mentionable" /> Mentionable</label>
+                <button class="btn btn-primary" id="role-save" type="button">Create role</button>
+                <button class="btn btn-ghost" id="role-cancel" type="button">Cancel</button>
+              </div>
+              <div class="empty" id="roles-empty">Loading roles…</div>
+              <div class="role-list" id="role-list"></div>
             </div>
           </section>
 

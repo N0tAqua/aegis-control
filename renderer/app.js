@@ -31,6 +31,7 @@ function can(scope) {
 const PAGE_META = {
   overview: ['Overview', 'Live status of Aegis and your servers.'],
   servers: ['Servers', 'Server-wide protection, per-member rules and sticky force mute/deafen.'],
+  roles: ['Roles', 'Create, edit, reorder and delete roles without opening Discord.'],
   access: ['Access', 'Choose exactly which Discord users can control Aegis.'],
   console: ['Console', 'Run Aegis commands without leaving the dashboard.'],
   activity: ['Activity', 'Everything Aegis has done since the dashboard opened.'],
@@ -53,6 +54,8 @@ const state = {
   page: 'overview',
   busy: false,
   expanded: new Set(),
+  roles: null,
+  roleEdit: null,
   authView: 'login',
   update: null,
   offlineNotified: false,
@@ -205,6 +208,8 @@ function renderNavGate() {
 
   show('[data-goto="overview"]', hasRoom);
   show('[data-goto="servers"]', hasRoom);
+  // Roles are edited through the licence server, so they work without a room.
+  show('[data-goto="roles"]', can('manageBot'));
   show('[data-goto="access"]', hasRoom);
   show('[data-goto="activity"]', hasRoom && can('viewLogs'));
   show('[data-goto="messages"]', hasRoom);
@@ -1255,8 +1260,9 @@ function renderAll() {
 
 function setPage(page) {
   const roomPage = state.room ? 'overview' : 'room';
-  if (page !== 'room' && page !== 'settings' && !state.room) page = 'room';
+  if (!['room', 'settings', 'roles'].includes(page) && !state.room) page = 'room';
   if (page === 'licenses' && !can('manageKeys')) page = roomPage;
+  if (page === 'roles' && !can('manageBot')) page = roomPage;
   if (page === 'console' && (!can('useConsole') || state.linked)) page = roomPage;
   if (page === 'activity' && !can('viewLogs')) page = roomPage;
 
@@ -1273,6 +1279,7 @@ function setPage(page) {
 
   if (page === 'console') $('console-input').focus();
   if (page === 'licenses') loadKeys();
+  if (page === 'roles') loadRoles();
   if (page === 'room') {
     loadRooms();
     loadSocial();
@@ -2093,6 +2100,205 @@ async function refreshStatus() {
   }
 }
 
+/* ------------------------------------------------------------------ roles --- */
+
+function roleColour(color) {
+  return `#${Number(color ?? 0).toString(16).padStart(6, '0')}`;
+}
+
+function roleButton(label, title, onClick, className = 'btn btn-ghost btn-small') {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = className;
+  button.textContent = label;
+  button.title = title;
+  button.addEventListener('click', onClick);
+  return button;
+}
+
+function renderRoles() {
+  const data = state.roles;
+  const list = $('role-list');
+  const empty = $('roles-empty');
+  list.replaceChildren();
+  if (!data) return;
+
+  const select = $('roles-guild');
+  const signature = `${data.guildId}:${(data.guilds ?? []).map((guild) => guild.id).join(',')}`;
+  if (select.dataset.signature !== signature) {
+    select.replaceChildren(
+      ...(data.guilds ?? []).map((guild) => {
+        const option = document.createElement('option');
+        option.value = guild.id;
+        option.textContent = guild.name;
+        option.selected = guild.id === data.guildId;
+        return option;
+      }),
+    );
+    select.dataset.signature = signature;
+  }
+  select.hidden = (data.guilds ?? []).length < 2;
+
+  $('roles-note').textContent = data.guildId
+    ? `${data.roles.length} role${data.roles.length === 1 ? '' : 's'}${data.canManage ? '' : ' · read-only'}`
+    : '';
+
+  if (!data.guildId) {
+    empty.hidden = false;
+    empty.textContent = 'The bot has not reported a server yet. Start Aegis, then press Add all.';
+    return;
+  }
+  if (!data.roles.length) {
+    empty.hidden = false;
+    empty.textContent = data.hostOnline
+      ? 'No roles loaded yet. Press Add all to read them from Discord.'
+      : 'The host runner is offline, so Discord cannot be reached right now.';
+    return;
+  }
+  empty.hidden = true;
+
+  for (const role of data.roles) {
+    const row = document.createElement('div');
+    row.className = 'role-row';
+
+    const head = document.createElement('div');
+    head.className = 'role-head';
+    const dot = document.createElement('span');
+    dot.className = 'role-dot';
+    dot.style.background = roleColour(role.color);
+    const name = document.createElement('span');
+    name.className = 'role-name';
+    name.textContent = role.name;
+    const meta = document.createElement('span');
+    meta.className = 'role-meta';
+    const bits = [roleColour(role.color), `${role.memberCount ?? 0} member(s)`];
+    if (role.hoist) bits.push('separate');
+    if (role.mentionable) bits.push('mentionable');
+    if (role.isEveryone) bits.push('everyone');
+    if (role.managed) bits.push('managed');
+    meta.textContent = bits.join(' · ');
+    head.append(dot, name, meta);
+    row.append(head);
+
+    if (role.canManage) {
+      const actions = document.createElement('div');
+      actions.className = 'role-actions';
+      actions.append(
+        roleButton('↑', 'Move up', () => moveRole(role, 'up')),
+        roleButton('↓', 'Move down', () => moveRole(role, 'down')),
+        roleButton('Edit', 'Edit this role', () => openRoleForm(role)),
+        roleButton('Delete', 'Delete this role', () => deleteRole(role), 'btn btn-ghost btn-small remove'),
+      );
+      row.append(actions);
+    }
+    list.append(row);
+  }
+}
+
+async function loadRoles(guildId) {
+  if (!can('manageBot')) return;
+  try {
+    state.roles = await api.roles.list(guildId ?? state.roles?.guildId ?? '');
+    renderRoles();
+  } catch (error) {
+    $('roles-empty').hidden = false;
+    $('roles-empty').textContent = cleanError(error);
+    $('role-list').replaceChildren();
+  }
+}
+
+async function runRoleTask(payload) {
+  const { id } = await api.roles.action({ ...payload, guildId: state.roles?.guildId });
+  const deadline = Date.now() + 25_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    const task = await api.roles.task(id).catch(() => null);
+    if (!task) continue;
+    if (task.status === 'done') return task.result;
+    if (task.status === 'error') throw new Error(task.result?.error || 'That change failed in Discord.');
+  }
+  throw new Error('The host runner did not answer. Check that it is online.');
+}
+
+function openRoleForm(role) {
+  state.roleEdit = role?.id ?? null;
+  $('role-form').hidden = false;
+  $('role-name').value = role?.name ?? '';
+  $('role-color').value = role && role.color ? role.hex : '';
+  $('role-hoist').checked = Boolean(role?.hoist);
+  $('role-mentionable').checked = Boolean(role?.mentionable);
+  $('role-save').textContent = role ? 'Save changes' : 'Create role';
+  $('role-name').focus();
+}
+
+async function saveRole() {
+  const name = $('role-name').value.trim();
+  if (!name) {
+    toast('Give the role a name.', 'err');
+    return;
+  }
+  const color = $('role-color').value.trim();
+  if (color && !/^#?[0-9a-f]{6}$/i.test(color)) {
+    toast('The colour should look like #5865f2.', 'err');
+    return;
+  }
+  const editing = Boolean(state.roleEdit);
+  const button = $('role-save');
+  button.disabled = true;
+  try {
+    await runRoleTask({
+      action: editing ? 'update' : 'create',
+      ...(editing ? { roleId: state.roleEdit } : {}),
+      name,
+      color: color || null,
+      hoist: $('role-hoist').checked,
+      mentionable: $('role-mentionable').checked,
+    });
+    $('role-form').hidden = true;
+    state.roleEdit = null;
+    toast(editing ? 'Role updated.' : 'Role created.');
+    await loadRoles();
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function moveRole(role, direction) {
+  try {
+    await runRoleTask({ action: 'move', roleId: role.id, direction });
+    await loadRoles();
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  }
+}
+
+async function deleteRole(role) {
+  if (!window.confirm(`Delete the role "${role.name}"? Members lose it immediately.`)) return;
+  try {
+    await runRoleTask({ action: 'delete', roleId: role.id });
+    toast('Role deleted.');
+    await loadRoles();
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  }
+}
+
+async function addAllRoles() {
+  const button = $('roles-add-all');
+  button.disabled = true;
+  try {
+    await runRoleTask({ action: 'refresh' });
+    await loadRoles();
+    toast(`All ${state.roles?.roles.length ?? 0} roles loaded.`);
+  } catch (error) {
+    toast(cleanError(error), 'err');
+  } finally {
+    button.disabled = false;
+  }
+}
+
 /* ---------------------------------------------------------------- wiring --- */
 
 $('firstrun-continue').addEventListener('click', () => {
@@ -2298,6 +2504,15 @@ $('hero-deploy').addEventListener('click', deployCommands);
 $('hero-invite').addEventListener('click', () => {
   const url = $('hero-invite').dataset.invite;
   if (url) api.openExternal(url);
+});
+
+$('roles-guild').addEventListener('change', () => loadRoles($('roles-guild').value));
+$('roles-add-all').addEventListener('click', addAllRoles);
+$('roles-new').addEventListener('click', () => openRoleForm(null));
+$('role-save').addEventListener('click', saveRole);
+$('role-cancel').addEventListener('click', () => {
+  $('role-form').hidden = true;
+  state.roleEdit = null;
 });
 
 for (const button of document.querySelectorAll('[data-goto]')) {

@@ -353,6 +353,48 @@
         .shell { padding: 18px 16px 48px; }
         .hero-status { font-size: 18px; }
       }
+      .role-dot {
+        display: inline-block;
+        width: 10px;
+        height: 10px;
+        margin-right: 8px;
+        vertical-align: middle;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.22);
+      }
+
+      #roles-guild {
+        width: auto;
+        min-width: 170px;
+        padding: 9px 12px;
+        border-radius: 10px;
+        border: 1px solid var(--line-2);
+        background: rgba(6, 10, 19, 0.85);
+        color: var(--text);
+        font: inherit;
+        font-size: 13px;
+      }
+
+      #role-form input {
+        width: auto;
+        flex: 1;
+        min-width: 150px;
+      }
+
+      .role-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 11px;
+        background: var(--panel-2);
+        border: 1px solid var(--line);
+      }
+
+      .role-row + .role-row {
+        margin-top: 7px;
+      }
     </style>
   </head>
   <body>
@@ -468,6 +510,33 @@
             <span class="muted" id="guild-count">—</span>
           </div>
           <div id="guilds"><div class="hint">The bot has not reported any servers yet.</div></div>
+        </section>
+
+        <section class="card" id="roles-card" hidden style="margin-bottom: 16px">
+          <div class="card-head">
+            <h2>Roles</h2>
+            <span class="spacer"></span>
+            <span class="muted" id="roles-count">—</span>
+          </div>
+          <p class="hint" style="margin: 0 0 12px">
+            Every role in the server, highest first. Move roles up and down, rename them, change their
+            colour, or create and delete them without opening Discord. Aegis needs <b>Manage Roles</b>,
+            with its own role above the roles it changes.
+          </p>
+          <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px">
+            <select id="roles-guild"></select>
+            <button class="btn small" id="roles-add-all" type="button">Add all</button>
+            <button class="btn primary small" id="roles-new" type="button">New role</button>
+          </div>
+          <div id="role-form" hidden style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 12px">
+            <input id="role-name" placeholder="Role name" maxlength="100" autocomplete="off" />
+            <input id="role-color" placeholder="Colour, e.g. #5865f2" autocomplete="off" spellcheck="false" />
+            <label class="chip"><input type="checkbox" id="role-hoist" /> Show separately</label>
+            <label class="chip"><input type="checkbox" id="role-mentionable" /> Mentionable</label>
+            <button class="btn primary small" id="role-save" type="button">Create role</button>
+            <button class="btn small" id="role-cancel" type="button">Cancel</button>
+          </div>
+          <div id="role-list"><div class="hint">Press Add all to load the roles.</div></div>
         </section>
 
         <section class="card">
@@ -622,6 +691,13 @@
         canManageKeys = scopes.includes('manageKeys');
         els('keys-card').hidden = !canManageKeys;
         if (canManageKeys) renderScopeBoxes(scopes);
+
+        canManageBot = scopes.includes('manageBot');
+        els('roles-card').hidden = !canManageBot;
+        if (canManageBot && !rolesLoaded) {
+          rolesLoaded = true;
+          loadRoles();
+        }
       }
 
       const KEY_SCOPES = [
@@ -724,6 +800,170 @@
         }
       }
 
+      /* ---------------------------------------------------------------- roles --- */
+
+      let canManageBot = false;
+      let rolesLoaded = false;
+      let rolesState = null;
+      let roleEditId = null;
+
+      const roleHex = (color) => `#${Number(color ?? 0).toString(16).padStart(6, '0')}`;
+
+      function renderRoles() {
+        const data = rolesState;
+        if (!data) return;
+        els('roles-count').textContent = data.guildId
+          ? `${data.roles.length} role${data.roles.length === 1 ? '' : 's'}${data.canManage ? '' : ' · read-only'}`
+          : '';
+
+        const select = els('roles-guild');
+        const signature = `${data.guildId}:${(data.guilds || []).map((guild) => guild.id).join(',')}`;
+        if (select.dataset.signature !== signature) {
+          select.innerHTML = (data.guilds || [])
+            .map(
+              (guild) =>
+                `<option value="${escapeHtml(guild.id)}"${guild.id === data.guildId ? ' selected' : ''}>${escapeHtml(guild.name)}</option>`,
+            )
+            .join('');
+          select.dataset.signature = signature;
+        }
+        select.hidden = (data.guilds || []).length < 2;
+
+        if (!data.guildId) {
+          els('role-list').innerHTML =
+            '<div class="hint">The bot has not reported a server yet. Start it, then press Add all.</div>';
+          return;
+        }
+        if (!data.roles.length) {
+          els('role-list').innerHTML = `<div class="hint">${
+            data.hostOnline
+              ? 'Press Add all to read the roles from Discord.'
+              : 'The host runner is offline, so Discord cannot be reached right now.'
+          }</div>`;
+          return;
+        }
+
+        els('role-list').innerHTML = data.roles
+          .map((role) => {
+            const meta = [roleHex(role.color), `${role.memberCount ?? 0} member(s)`];
+            if (role.hoist) meta.push('separate');
+            if (role.mentionable) meta.push('mentionable');
+            if (role.isEveryone) meta.push('everyone');
+            if (role.managed) meta.push('managed');
+            const actions = role.canManage
+              ? `<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+                   <button class="btn small" data-role="${escapeHtml(role.id)}" data-act="up" title="Move up">↑</button>
+                   <button class="btn small" data-role="${escapeHtml(role.id)}" data-act="down" title="Move down">↓</button>
+                   <button class="btn small" data-role="${escapeHtml(role.id)}" data-act="edit">Edit</button>
+                   <button class="btn small danger" data-role="${escapeHtml(role.id)}" data-act="delete">Delete</button>
+                 </div>`
+              : '';
+            return `<div class="role-row">
+              <div>
+                <span class="role-dot" style="background:${roleHex(role.color)}"></span><b>${escapeHtml(role.name)}</b>
+                <div class="meta">${escapeHtml(meta.join(' · '))}</div>
+              </div>
+              ${actions}
+            </div>`;
+          })
+          .join('');
+      }
+
+      async function loadRoles(guildId) {
+        if (!canManageBot) return;
+        try {
+          const query = guildId || rolesState?.guildId || '';
+          rolesState = await call(`/roles${query ? `?guild=${encodeURIComponent(query)}` : ''}`);
+          renderRoles();
+        } catch (error) {
+          els('role-list').innerHTML = `<div class="hint">${escapeHtml(error.message)}</div>`;
+        }
+      }
+
+      async function runRoleTask(payload) {
+        const { id } = await call('/roles', {
+          method: 'POST',
+          body: { ...payload, guildId: rolesState?.guildId },
+        });
+        const deadline = Date.now() + 25_000;
+        while (Date.now() < deadline) {
+          await new Promise((resolve) => setTimeout(resolve, 700));
+          const task = await call(`/roles/task/${encodeURIComponent(id)}`).catch(() => null);
+          if (!task) continue;
+          if (task.status === 'done') return task.result;
+          if (task.status === 'error') {
+            throw new Error(task.result?.error || 'That change failed in Discord.');
+          }
+        }
+        throw new Error('The host runner did not answer. Check that it is online.');
+      }
+
+      function openRoleForm(role) {
+        roleEditId = role?.id ?? null;
+        els('role-form').hidden = false;
+        els('role-name').value = role?.name ?? '';
+        els('role-color').value = role && role.color ? role.hex : '';
+        els('role-hoist').checked = Boolean(role?.hoist);
+        els('role-mentionable').checked = Boolean(role?.mentionable);
+        els('role-save').textContent = role ? 'Save changes' : 'Create role';
+        els('role-name').focus();
+      }
+
+      async function saveRole() {
+        const name = els('role-name').value.trim();
+        if (!name) {
+          toast('Give the role a name.', 'err');
+          return;
+        }
+        const color = els('role-color').value.trim();
+        if (color && !/^#?[0-9a-f]{6}$/i.test(color)) {
+          toast('The colour should look like #5865f2.', 'err');
+          return;
+        }
+        const editing = Boolean(roleEditId);
+        const button = els('role-save');
+        button.disabled = true;
+        try {
+          await runRoleTask({
+            action: editing ? 'update' : 'create',
+            ...(editing ? { roleId: roleEditId } : {}),
+            name,
+            color: color || null,
+            hoist: els('role-hoist').checked,
+            mentionable: els('role-mentionable').checked,
+          });
+          els('role-form').hidden = true;
+          roleEditId = null;
+          toast(editing ? 'Role updated.' : 'Role created.');
+          await loadRoles();
+        } catch (error) {
+          toast(error.message, 'err');
+        } finally {
+          button.disabled = false;
+        }
+      }
+
+      async function roleAction(roleId, act) {
+        const role = rolesState?.roles.find((entry) => entry.id === roleId);
+        if (!role) return;
+        if (act === 'edit') {
+          openRoleForm(role);
+          return;
+        }
+        try {
+          if (act === 'delete') {
+            if (!confirm(`Delete the role "${role.name}"? Members lose it immediately.`)) return;
+            await runRoleTask({ action: 'delete', roleId: role.id });
+            toast('Role deleted.');
+          } else if (act === 'up' || act === 'down') {
+            await runRoleTask({ action: 'move', roleId: role.id, direction: act });
+          }
+          await loadRoles();
+        } catch (error) {
+          toast(error.message, 'err');
+        }
+      }
+
       async function loadDiscordRedirect() {
         try {
           const data = await call('/auth/discord/status');
@@ -746,6 +986,7 @@
         els('shell').hidden = false;
         loadDiscordRedirect();
         loadKeys();
+        if (canManageBot) loadRoles();
         return true;
       }
 
@@ -1108,6 +1349,32 @@
         const button = event.target.closest('button[data-act]');
         if (!button) return;
         keyAction(button.dataset.key, button.dataset.act);
+      });
+
+      els('roles-guild').addEventListener('change', () => loadRoles(els('roles-guild').value));
+      els('roles-new').addEventListener('click', () => openRoleForm(null));
+      els('role-save').addEventListener('click', saveRole);
+      els('role-cancel').addEventListener('click', () => {
+        els('role-form').hidden = true;
+        roleEditId = null;
+      });
+      els('roles-add-all').addEventListener('click', async () => {
+        const button = els('roles-add-all');
+        button.disabled = true;
+        try {
+          await runRoleTask({ action: 'refresh' });
+          await loadRoles();
+          toast(`All ${rolesState?.roles.length ?? 0} roles loaded.`);
+        } catch (error) {
+          toast(error.message, 'err');
+        } finally {
+          button.disabled = false;
+        }
+      });
+      els('role-list').addEventListener('click', (event) => {
+        const button = event.target.closest('button[data-act]');
+        if (!button) return;
+        roleAction(button.dataset.role, button.dataset.act);
       });
 
       els('copy-host-token').addEventListener('click', async () => {

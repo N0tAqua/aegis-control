@@ -328,6 +328,21 @@ export class AuthStore {
     return this.getStatusPayload({ firstRun: false });
   }
 
+  /* ----------------------------------------------------------------- roles --- */
+
+  async listRoles(guildId = '') {
+    const query = guildId ? `?guild=${encodeURIComponent(guildId)}` : '';
+    return this.request(`/api/roles${query}`);
+  }
+
+  async roleAction(payload = {}) {
+    return this.request('/api/roles', { method: 'POST', body: payload });
+  }
+
+  async roleTask(id) {
+    return this.request(`/api/roles/task/${encodeURIComponent(id)}`);
+  }
+
   async listKeys() {
     const data = await this.request('/api/keys');
     return data.keys ?? [];

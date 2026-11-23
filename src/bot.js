@@ -47,6 +47,16 @@ function isSnowflake(value) {
   return typeof value === 'string' && /^\d{17,20}$/.test(value);
 }
 
+/** "#ff6600" or a number -> colour int, null when the input is empty. */
+function roleColor(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(0xffffff, Math.max(0, Math.trunc(value)));
+  }
+  const match = /^#?([0-9a-f]{6})$/i.exec(String(value).trim());
+  return match ? Number.parseInt(match[1], 16) : null;
+}
+
 function normalizeMember(raw) {
   return {
     displayName: typeof raw?.displayName === 'string' ? raw.displayName : null,
@@ -1017,6 +1027,154 @@ export class BotManager extends EventEmitter {
       names: data.map((command) => command.name),
       removed,
     };
+  }
+
+  /* ----------------------------------------------------------------- roles --- */
+
+  /** The live guild for a role request, or an error the panel can show. */
+  requireGuild(guildId) {
+    if (!this.client?.isReady?.()) throw new Error('Start Aegis before managing roles.');
+    const guild = this.client.guilds.cache.get(String(guildId ?? '').trim());
+    if (!guild) throw new Error('Aegis is not in that server.');
+    return guild;
+  }
+
+  roleView(guild, role, me) {
+    const everyone = role.id === guild.id;
+    const canManage =
+      !everyone &&
+      !role.managed &&
+      Boolean(me?.permissions?.has(PermissionFlagsBits.ManageRoles)) &&
+      Boolean(me && role.position < me.roles.highest.position);
+    return {
+      id: role.id,
+      name: role.name,
+      color: role.color,
+      hex: `#${Number(role.color ?? 0).toString(16).padStart(6, '0')}`,
+      position: role.position,
+      hoist: Boolean(role.hoist),
+      mentionable: Boolean(role.mentionable),
+      managed: Boolean(role.managed),
+      isEveryone: everyone,
+      memberCount: role.members?.size ?? 0,
+      canManage,
+    };
+  }
+
+  listRoles(guildId) {
+    const guild = this.requireGuild(guildId);
+    const me = guild.members.me;
+    const roles = [...guild.roles.cache.values()]
+      .sort((a, b) => b.position - a.position)
+      .map((role) => this.roleView(guild, role, me));
+    return {
+      guildId: guild.id,
+      guildName: guild.name,
+      canManageRoles: Boolean(me?.permissions?.has(PermissionFlagsBits.ManageRoles)),
+      roles,
+    };
+  }
+
+  async createRole(guildId, input = {}) {
+    const guild = this.requireGuild(guildId);
+    const me = guild.members.me;
+    if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+      throw new Error('Aegis needs the Manage Roles permission to create roles.');
+    }
+    const name = String(input.name ?? '').trim().slice(0, 100);
+    if (!name) throw new Error('Give the role a name.');
+
+    const role = await guild.roles.create({
+      name,
+      color: roleColor(input.color) ?? undefined,
+      hoist: Boolean(input.hoist),
+      mentionable: Boolean(input.mentionable),
+      reason: `Created from the Aegis panel by ${input.by ?? 'the dashboard'}`,
+    });
+    this.log('info', `[${guild.name}] Created role ${role.name}.`);
+    this.emit('status');
+    return this.listRoles(guild.id);
+  }
+
+  async updateRole(guildId, roleId, input = {}) {
+    const guild = this.requireGuild(guildId);
+    const me = guild.members.me;
+    const role = guild.roles.cache.get(String(roleId ?? ''));
+    if (!role) throw new Error('That role no longer exists.');
+    if (role.id === guild.id) throw new Error('The @everyone role cannot be edited.');
+    if (role.managed) throw new Error('That role is managed by an integration and cannot be edited.');
+    if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+      throw new Error('Aegis needs the Manage Roles permission to edit roles.');
+    }
+    if (role.position >= me.roles.highest.position) {
+      throw new Error("That role sits at or above Aegis's highest role. Move Aegis's role higher first.");
+    }
+
+    const patch = {};
+    if (input.name !== undefined) {
+      const name = String(input.name).trim().slice(0, 100);
+      if (!name) throw new Error('Give the role a name.');
+      patch.name = name;
+    }
+    const color = roleColor(input.color);
+    if (color !== null) patch.color = color;
+    if (input.hoist !== undefined) patch.hoist = Boolean(input.hoist);
+    if (input.mentionable !== undefined) patch.mentionable = Boolean(input.mentionable);
+    if (!Object.keys(patch).length) throw new Error('Nothing to change.');
+
+    await role.edit(patch, `Edited from the Aegis panel by ${input.by ?? 'the dashboard'}`);
+    this.log('info', `[${guild.name}] Updated role ${role.name}.`);
+    this.emit('status');
+    return this.listRoles(guild.id);
+  }
+
+  async deleteRole(guildId, roleId, { by = 'the dashboard' } = {}) {
+    const guild = this.requireGuild(guildId);
+    const me = guild.members.me;
+    const role = guild.roles.cache.get(String(roleId ?? ''));
+    if (!role) throw new Error('That role no longer exists.');
+    if (role.id === guild.id) throw new Error('The @everyone role cannot be deleted.');
+    if (role.managed) throw new Error('That role is managed by an integration and cannot be deleted.');
+    if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+      throw new Error('Aegis needs the Manage Roles permission to delete roles.');
+    }
+    if (role.position >= me.roles.highest.position) {
+      throw new Error("That role sits at or above Aegis's highest role. Move Aegis's role higher first.");
+    }
+
+    await role.delete(`Deleted from the Aegis panel by ${by}`);
+    this.log('info', `[${guild.name}] Deleted role ${role.name}.`);
+    this.emit('status');
+    return this.listRoles(guild.id);
+  }
+
+  async moveRole(guildId, roleId, direction, { by = 'the dashboard' } = {}) {
+    const guild = this.requireGuild(guildId);
+    const me = guild.members.me;
+    const role = guild.roles.cache.get(String(roleId ?? ''));
+    if (!role) throw new Error('That role no longer exists.');
+    if (role.id === guild.id) throw new Error('The @everyone role cannot be moved.');
+    if (!['up', 'down'].includes(direction)) throw new Error('Move a role up or down.');
+    if (!me?.permissions?.has(PermissionFlagsBits.ManageRoles)) {
+      throw new Error('Aegis needs the Manage Roles permission to move roles.');
+    }
+    if (role.position >= me.roles.highest.position) {
+      throw new Error("That role sits at or above Aegis's highest role. Move Aegis's role higher first.");
+    }
+
+    const ordered = [...guild.roles.cache.values()]
+      .filter((entry) => entry.id !== guild.id)
+      .sort((a, b) => b.position - a.position);
+    const index = ordered.findIndex((entry) => entry.id === role.id);
+    const neighbour = direction === 'up' ? ordered[index - 1] : ordered[index + 1];
+    if (!neighbour) {
+      throw new Error(`That role is already at the ${direction === 'up' ? 'top' : 'bottom'}.`);
+    }
+
+    await role.setPosition(neighbour.position, { reason: `Moved from the Aegis panel by ${by}` });
+    this.log('info', `[${guild.name}] Moved role ${role.name} ${direction}.`);
+    this.emit('status');
+    return this.listRoles(guild.id);
   }
 
   /* ---------------------------------------------------------------- status --- */
