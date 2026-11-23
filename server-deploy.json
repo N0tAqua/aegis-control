@@ -6,6 +6,11 @@
       "name": "worker.js",
       "type": "esm",
       "path": "./server/worker.js"
+    },
+    {
+      "name": "features-catalog.js",
+      "type": "esm",
+      "path": "./server/features-catalog.js"
     }
   ],
   "assetsDirectory": "./server/public",

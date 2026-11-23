@@ -23,6 +23,13 @@ Node 24 recommended.
 Step-by-step for Wispbyte (Node image, git pull, env vars) is in
 [SELFHOST.md](SELFHOST.md).
 
+## Public pages
+
+- `/` — dashboard sign-in
+- `/download` — newest build, read from GitHub releases
+- `/features` — what the bot does, generated from `server/features-catalog.js`
+- `/terms` and `/privacy` — Terms of Service and Privacy Policy
+
 ## Desktop app
 
 ```

@@ -4,6 +4,8 @@
  * No external dependencies: Web Crypto for hashing, D1 for data, R2 for release parts.
  */
 
+import { FEATURE_COUNT, FEATURE_GROUPS, FEATURES_UPDATED, OWNER } from './features-catalog.js';
+
 const SCOPES = ['manageBot', 'manageRules', 'useConsole', 'viewLogs', 'manageKeys', 'manageRooms', 'linkConsole'];
 const SESSION_MS = 1000 * 60 * 60 * 24 * 30;
 const LOGIN_FLOW_PATHS = new Set(['/api/auth/login', '/api/auth/salt', '/api/auth/register', '/api/auth/verify']);
@@ -1166,7 +1168,7 @@ function downloadPage(release, repo = '') {
     <h1>Aegis Control</h1>
     <p class="sub">Windows dashboard for the Aegis Discord bot</p>
     ${body}
-    <p class="meta">Served by your Aegis server &middot; <a href="/">status</a></p>
+    <p class="meta">Served by your Aegis server &middot; <a href="/features">features</a> &middot; <a href="/">status</a></p>
   </main>
 </body>
 </html>`,
@@ -3125,6 +3127,119 @@ p{color:#9aa3b2;margin:0}
   );
 }
 
+function htmlEscape(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+function featuresPage() {
+  const groups = FEATURE_GROUPS.map((group, index) => {
+    const cards = group.features
+      .map(
+        (feature) => `
+        <article class="feature">
+          <div class="feature-head">
+            <h3>${htmlEscape(feature.name)}</h3>
+            ${feature.command ? `<code>${htmlEscape(feature.command)}</code>` : ''}
+          </div>
+          <p>${htmlEscape(feature.description)}</p>
+        </article>`,
+      )
+      .join('');
+    return `
+      <section class="group">
+        <div class="group-head">
+          <span class="group-num">${String(index + 1).padStart(2, '0')}</span>
+          <div>
+            <h2>${htmlEscape(group.title)}</h2>
+            <p>${htmlEscape(group.blurb)}</p>
+          </div>
+        </div>
+        <div class="grid">${cards}</div>
+      </section>`;
+  }).join('');
+
+  return new Response(
+    `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis — Features</title>
+<meta name="description" content="Everything the Aegis Discord bot does: panic mode, anti-nuke, tickets, giveaways, temp voice, economy, events, stat counters, an AI copilot and a full dashboard. Made by Aqua.">
+<style>
+:root{color-scheme:dark;--bg:#070b14;--panel:#0d1320;--line:#1b2436;--ink:#e8eeff;--muted:#93a2c2;--accent:#7ba4ff}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(900px 480px at 12% -8%,rgba(60,110,220,.22),transparent 60%),radial-gradient(760px 420px at 88% 0%,rgba(126,88,226,.15),transparent 55%),var(--bg);color:var(--ink);font:15px/1.65 "Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--accent);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1060px;margin:0 auto;padding:0 22px}
+.topbar{position:sticky;top:0;z-index:5;background:rgba(7,11,20,.82);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;height:62px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:650;letter-spacing:.02em}
+.brand:hover{text-decoration:none}
+.mark{display:grid;place-items:center;width:30px;height:30px;border-radius:9px;background:linear-gradient(160deg,#5f8cff,#3559c7);color:#fff;font-size:15px;font-weight:700;box-shadow:0 6px 18px rgba(84,130,255,.35)}
+nav{display:flex;align-items:center;gap:18px;font-size:13.5px}
+nav .pill{padding:7px 14px;border:1px solid #2a3a5c;border-radius:9px;color:var(--ink);background:#101a2e}
+nav .pill:hover{border-color:#3d5687;text-decoration:none}
+.hero{padding:64px 0 40px;max-width:760px}
+.owner{display:inline-flex;align-items:center;gap:9px;padding:6px 13px 6px 6px;border:1px solid var(--line);border-radius:999px;background:rgba(15,23,39,.8);color:var(--muted);font-size:13px}
+.owner:hover{text-decoration:none;border-color:#33456b;color:var(--ink)}
+.owner .avatar{display:grid;place-items:center;width:22px;height:22px;border-radius:999px;background:linear-gradient(150deg,#7ba4ff,#8b6cf0);color:#08101f;font-weight:700;font-size:11px}
+.owner b{color:var(--ink);font-weight:650}
+.owner .tag{padding:2px 7px;border-radius:6px;background:#16213a;color:#9ec0ff;font-size:11px;letter-spacing:.03em}
+h1{font-size:clamp(32px,5vw,46px);line-height:1.12;letter-spacing:-.03em;margin:20px 0 14px;font-weight:700}
+.grad{background:linear-gradient(100deg,#9dc0ff,#c3b2ff 60%,#8ef0d2);-webkit-background-clip:text;background-clip:text;color:transparent}
+.lede{margin:0;color:var(--muted);font-size:16.5px;max-width:600px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chip{padding:6px 12px;border:1px solid var(--line);border-radius:999px;background:#0c1424;color:#a9bada;font-size:12.5px}
+.group{padding:30px 0 6px;border-top:1px solid var(--line);margin-top:26px}
+.group-head{display:flex;gap:16px;align-items:flex-start;margin-bottom:18px}
+.group-num{font:600 13px/1 ui-monospace,Consolas,monospace;color:#5f74a0;padding-top:6px;letter-spacing:.08em}
+.group-head h2{margin:0;font-size:21px;letter-spacing:-.01em}
+.group-head p{margin:3px 0 0;color:var(--muted);font-size:13.5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:12px}
+.feature{padding:17px 18px 15px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(170deg,rgba(16,24,41,.95),rgba(10,16,28,.95));transition:border-color .15s ease,transform .15s ease}
+.feature:hover{border-color:#31456e;transform:translateY(-1px)}
+.feature-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.feature h3{margin:0;font-size:15px;font-weight:640;letter-spacing:-.005em}
+.feature code{flex:none;font:500 11.5px/1.4 ui-monospace,Consolas,monospace;color:#9fc0ff;background:#101c33;border:1px solid #1d2d4c;border-radius:6px;padding:3px 6px}
+.feature p{margin:0;color:#9dabc7;font-size:13.4px;line-height:1.6}
+footer{border-top:1px solid var(--line);margin-top:46px;padding:28px 0 44px;color:#6f7f9e;font-size:13px}
+.foot{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between}
+.foot-links{display:flex;flex-wrap:wrap;gap:16px}
+.updated{margin-top:10px;font-size:12px;color:#5b6a88}
+@media (max-width:560px){nav .hide-sm{display:none}.hero{padding:44px 0 30px}.bar{height:58px}}
+</style></head>
+<body>
+<header class="topbar"><div class="wrap bar">
+  <a class="brand" href="/"><span class="mark">A</span>Aegis</a>
+  <nav>
+    <a class="hide-sm" href="/download">Download</a>
+    <a class="hide-sm" href="/terms">Terms</a>
+    <a class="hide-sm" href="/privacy">Privacy</a>
+    <a class="pill" href="/">Dashboard</a>
+  </nav>
+</div></header>
+<main class="wrap">
+  <section class="hero">
+    <a class="owner" href="${OWNER.discordUrl}" target="_blank" rel="noreferrer">
+      <span class="avatar">A</span>Made by <b>${OWNER.name}</b><span class="tag">Discord ↗</span>
+    </a>
+    <h1>Everything <span class="grad">Aegis</span> does</h1>
+    <p class="lede">One Discord bot for protecting the server, running the community and handling the setup work — with a web dashboard and a Windows app, so you never have to type a command to get things done.</p>
+    <div class="chips"><span class="chip">${FEATURE_COUNT} features</span><span class="chip">Web + desktop</span><span class="chip">Self-hosted</span><span class="chip">No install needed on the web</span></div>
+  </section>
+  ${groups}
+</main>
+<footer><div class="wrap">
+  <div class="foot">
+    <span>Built and maintained by <a href="${OWNER.discordUrl}" target="_blank" rel="noreferrer">${OWNER.name}</a> · <a href="https://discord.com/users/${OWNER.discordId}" target="_blank" rel="noreferrer">Message me on Discord</a></span>
+    <span class="foot-links"><a href="/download">Download</a><a href="/">Dashboard</a><a href="/terms">Terms</a><a href="/privacy">Privacy</a><a href="https://github.com/N0tAqua/aegis-control">GitHub</a></span>
+  </div>
+  <p class="updated">Last updated ${FEATURES_UPDATED} · every new feature is added to this page.</p>
+</div></footer>
+</body></html>`,
+    { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300' } },
+  );
+}
+
 function legalShell(title, body) {
   return new Response(
     `<!doctype html>
@@ -3149,7 +3264,7 @@ code{background:#171a21;padding:1px 5px;border-radius:4px;font-size:13px}
 <div class="brand"><span>A</span>Aegis Control</div>
 <h1>${title}</h1>
 <p class="muted">Last updated: 23 November 2026</p>
-<nav><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a><a href="/">Dashboard</a></nav>
+<nav><a href="/features">Features</a><a href="/terms">Terms of Service</a><a href="/privacy">Privacy Policy</a><a href="/">Dashboard</a></nav>
 ${body}
 <hr>
 <p class="muted">Aegis Control is a Discord bot and dashboard. Contact the operator through
@@ -3289,6 +3404,9 @@ export default {
       }
       if (url.pathname === '/link' || url.pathname === '/link/') {
         return linkPage();
+      }
+      if (url.pathname === '/features' || url.pathname === '/features/') {
+        return featuresPage();
       }
       if (url.pathname === '/terms' || url.pathname === '/terms/') {
         return legalPage('terms');

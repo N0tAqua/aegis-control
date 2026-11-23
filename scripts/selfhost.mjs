@@ -14,14 +14,15 @@
  *
  * Optional:
  *   AEGIS_HOST_TOKEN   pin the runner token (for an external runner instead)
- *   AEGIS_HOST_RUNNER  set 0 to disable the built-in runner
+ *   AEGIS_HOST_RUNNER  set 0 to disable the built-in runner (an external one
+ *                      on another machine keeps its token then)
  *   AEGIS_ALWAYS_RUN   set 1 to ignore dashboard stop commands
  *   AEGIS_DATA_DIR     where the database and files live (host-data)
  */
 import 'dotenv/config';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { createAegisServer } from '../server/node/server.mjs';
@@ -126,24 +127,69 @@ function makeHostToken() {
   return `AEGIS-HOST-${group()}-${group()}-${group()}-${group()}`;
 }
 
+function tokenHash(token) {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/* The minted token has to survive a restart. The database only keeps its hash,
+ * so a restored container used to come back with no way to talk to itself: the
+ * bot stayed online but every dashboard action said "the host runner is
+ * offline". Keep the token next to the database, readable only by this user. */
+const RUNNER_FILE = path.join(DATA_DIR, 'host-runner.json');
+
+async function saveRunnerToken(token) {
+  await mkdir(DATA_DIR, { recursive: true });
+  await writeFile(RUNNER_FILE, JSON.stringify({ token, createdAt: Date.now() }), { mode: 0o600 });
+}
+
+async function loadRunnerToken(storedHash) {
+  try {
+    const parsed = JSON.parse(await readFile(RUNNER_FILE, 'utf8'));
+    const token = String(parsed?.token || '').trim();
+    if (!token) return null;
+    if (storedHash && tokenHash(token) !== storedHash) return null;
+    return token;
+  } catch {
+    return null;
+  }
+}
+
+async function pairRunner() {
+  const storedHash = await readSetting('bot_host_hash');
+  const saved = await loadRunnerToken(storedHash);
+  if (saved) {
+    console.log('  host : reusing the saved runner token, so dashboard control survives restarts');
+    return saved;
+  }
+
+  const token = makeHostToken();
+  await saveRunnerToken(token);
+  await writeSetting('bot_host_hash', tokenHash(token));
+  await writeSetting('bot_host_seen', 0);
+  // A brand new install comes online by itself, then follows the dashboard.
+  if (!(await readSetting('bot_desired'))) await writeSetting('bot_desired', 'running');
+  if (storedHash) {
+    console.log('  host : re-paired the built-in runner (the previous token was not saved)');
+    console.log('         a runner on another machine would need the new token from the dashboard');
+  } else {
+    console.log('  host : runner token created, so dashboard start/stop works');
+  }
+  return token;
+}
+
 let runnerToken = HOST_TOKEN;
 if (!runnerToken && RUNNER_ENABLED) {
   try {
-    if (await readSetting('bot_host_hash')) {
-      console.log('  host : a host token already exists, so no local runner was started');
-      console.log('         set AEGIS_HOST_TOKEN to use the dashboard buttons from here');
-    } else {
-      runnerToken = makeHostToken();
-      await writeSetting(
-        'bot_host_hash',
-        createHash('sha256').update(runnerToken).digest('hex'),
-      );
-      // A brand new install comes online by itself, then follows the dashboard.
-      if (!(await readSetting('bot_desired'))) await writeSetting('bot_desired', 'running');
-      console.log('  host : runner token created, so dashboard start/stop works');
-    }
+    runnerToken = await pairRunner();
   } catch (error) {
     console.warn(`  host : could not set up the dashboard runner (${error.message})`);
+  }
+} else if (runnerToken && RUNNER_ENABLED) {
+  // Keep a pinned token across restarts too, in case the variable is removed.
+  try {
+    await saveRunnerToken(runnerToken);
+  } catch (error) {
+    console.warn(`  host : could not save the pinned runner token (${error.message})`);
   }
 }
 

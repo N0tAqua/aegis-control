@@ -34,10 +34,13 @@ const STATE_FILE = path.join(DATA_DIR, 'host-state.json');
 const ALWAYS_RUN = /^(1|true|yes|on)$/i.test(String(process.env.AEGIS_ALWAYS_RUN || '').trim());
 // Hosting counts every request against a daily (10,000) and a monthly (100,000)
 // allowance, so a 24/7 runner has to stay cheap: one command check a minute and
-// one status report every five minutes is about 1,730 requests a day (~52,000 a
+// one status report every four minutes is about 1,800 requests a day (~54,000 a
 // month), which leaves the rest of the allowance for the dashboard and the app.
 const POLL_MS = 60_000;
-const REPORT_MS = 300_000;
+// The server counts a runner offline after seven minutes, so a five minute
+// report left almost no room: one slow request and the dashboard refused every
+// action. Four minutes keeps a full three minute margin at a trivial cost.
+const REPORT_MS = 240_000;
 // Role edits from the panel or the app are queued on the server; this is how
 // quickly the runner picks them up. Only polled while the bot is running, and
 // only on a host that runs its own server, so the allowance comment above does

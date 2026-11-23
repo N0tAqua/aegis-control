@@ -62,9 +62,13 @@ bot online. Nothing to copy and nothing to run on your PC.
 | `AEGIS_HOST_TOKEN` | pin the runner token instead of the generated one |
 | `AEGIS_ALWAYS_RUN=1` | the bot ignores Stop and stays up (crashes already restart it) |
 
-If a token was already created in the dashboard, the server leaves it alone —
-that token may belong to a runner on another machine. Set `AEGIS_HOST_TOKEN` to
-that value instead if you want the runner here.
+The token is saved in `host-data/host-runner.json`, so a restart reuses it and
+the Start/Stop controls keep working. If the database has a host token but that
+file is missing — a restored container, for example — the server generates and
+saves a new one instead of leaving the dashboard permanently offline, and says
+so in the log (`host : re-paired the built-in runner`). A runner on another
+machine would then need the new token from the dashboard; set
+`AEGIS_HOST_RUNNER=0` to stop this host running its own runner at all.
 
 ## 5. Sign in
 
@@ -85,6 +89,7 @@ one is set it tells you where to put it and calls nothing.
 ## What is stored where
 
 - `host-data/aegis.sqlite` — accounts, keys, sessions, dashboard tokens
+- `host-data/host-runner.json` — this server's runner token (keep it private)
 - `host-data/files/` — published app updates
 - `host-data/bot/` — bot settings, logs and saved run state
 
