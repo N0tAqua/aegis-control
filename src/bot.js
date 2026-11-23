@@ -72,6 +72,42 @@ function isMemberEmpty(member) {
  * Owns the Discord client and all persisted settings. Used by both the desktop
  * dashboard and the headless CLI, so behaviour is identical in both.
  */
+/**
+ * A command registered both globally and in a server is listed twice in Discord.
+ * Deploying writes one scope, so this clears the same names from the other one.
+ */
+export async function clearCommandCopies({ rest, applicationId, names, guildId, guildIds = [] }) {
+  const removed = [];
+
+  if (guildId) {
+    const existing = await rest.get(Routes.applicationCommands(applicationId)).catch(() => []);
+    for (const command of existing ?? []) {
+      if (!names.has(command.name)) continue;
+      const done = await rest
+        .delete(Routes.applicationCommand(applicationId, command.id))
+        .then(() => true)
+        .catch(() => false);
+      if (done) removed.push(`/${command.name} (global copy)`);
+    }
+    return removed;
+  }
+
+  for (const id of guildIds) {
+    const existing = await rest
+      .get(Routes.applicationGuildCommands(applicationId, id))
+      .catch(() => []);
+    for (const command of existing ?? []) {
+      if (!names.has(command.name)) continue;
+      const done = await rest
+        .delete(Routes.applicationGuildCommand(applicationId, id, command.id))
+        .then(() => true)
+        .catch(() => false);
+      if (done) removed.push(`/${command.name} (server copy)`);
+    }
+  }
+  return removed;
+}
+
 export class BotManager extends EventEmitter {
   constructor({ dataDir }) {
     super();
@@ -944,15 +980,42 @@ export class BotManager extends EventEmitter {
       ? Routes.applicationGuildCommands(application.id, scopedGuild)
       : Routes.applicationCommands(application.id);
 
-    const data = await rest.put(route, { body: commands.map((command) => command.data.toJSON()) });
+    // Register each name once: Discord rejects a payload with two identical
+    // names, and we would rather drop the later duplicate than fail the deploy.
+    const body = [];
+    const seen = new Set();
+    for (const command of commands) {
+      if (seen.has(command.data.name)) continue;
+      seen.add(command.data.name);
+      body.push(command.data.toJSON());
+    }
+
+    const names = new Set(body.map((command) => command.name));
+    const guildIds = scopedGuild
+      ? []
+      : this.client?.isReady?.()
+        ? [...this.client.guilds.cache.keys()]
+        : ((await rest.get(Routes.userGuilds()).catch(() => [])) ?? []).map((guild) => guild.id);
+    const removed = await clearCommandCopies({
+      rest,
+      applicationId: application.id,
+      names,
+      guildId: scopedGuild,
+      guildIds,
+    });
+
+    const data = await rest.put(route, { body });
     this.log(
       'info',
-      `Registered ${data.length} slash command(s) ${scopedGuild ? 'in the server' : 'globally'}.`,
+      `Registered ${data.length} slash command(s) ${scopedGuild ? 'in the server' : 'globally'}.${
+        removed.length ? ` Removed ${removed.length} duplicate(s).` : ''
+      }`,
     );
     return {
       count: data.length,
       scope: scopedGuild ? 'guild' : 'global',
       names: data.map((command) => command.name),
+      removed,
     };
   }
 

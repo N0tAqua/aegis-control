@@ -2065,7 +2065,9 @@ async function deployCommands() {
     if (typeof result === 'string') toast(result);
     else {
       toast(
-        `Registered ${result.count} commands ${result.scope === 'guild' ? 'on your server' : 'globally'}.`,
+        `Registered ${result.count} commands ${result.scope === 'guild' ? 'on your server' : 'globally'}.${
+          result.removed?.length ? ` Removed ${result.removed.length} duplicate(s).` : ''
+        }`,
       );
     }
   } catch (error) {

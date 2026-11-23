@@ -36,6 +36,31 @@ async function register(applicationId) {
     ? Routes.applicationGuildCommands(applicationId, guildId)
     : Routes.applicationCommands(applicationId);
 
+  // The same name registered globally and in the server shows up twice, so
+  // clear the scope we are not using.
+  if (guildId) {
+    const existingGlobal = await rest.get(Routes.applicationCommands(applicationId)).catch(() => []);
+    for (const command of existingGlobal) {
+      if (!body.some((entry) => entry.name === command.name)) continue;
+      await rest.delete(Routes.applicationCommand(applicationId, command.id)).catch(() => {});
+      console.log(`Removed the global copy of /${command.name}.`);
+    }
+  } else {
+    const guilds = (await rest.get(Routes.userGuilds()).catch(() => [])) ?? [];
+    for (const guild of guilds) {
+      const existing = await rest
+        .get(Routes.applicationGuildCommands(applicationId, guild.id))
+        .catch(() => []);
+      for (const command of existing) {
+        if (!body.some((entry) => entry.name === command.name)) continue;
+        await rest
+          .delete(Routes.applicationGuildCommand(applicationId, guild.id, command.id))
+          .catch(() => {});
+        console.log(`Removed the server copy of /${command.name} from ${guild.name}.`);
+      }
+    }
+  }
+
   const data = await rest.put(route, { body });
   console.log(
     `Registered ${data.length} slash command(s) ${guildId ? `on guild ${guildId}` : 'globally'}: ${data
