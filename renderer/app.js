@@ -2435,6 +2435,21 @@ function renderPanicTool(features) {
   $('panic-window').value = Math.round((panic.joinWindowMs ?? 3_600_000) / 60_000);
   const list = $('panic-timeline');
   list.replaceChildren();
+  const quarantine = panic.quarantineReport;
+  if (quarantine?.targets !== undefined) {
+    const summary = toolEl('div', `tool-item ${quarantine.incomplete || quarantine.failed ? 'danger' : ''}`);
+    const body = toolEl('div', 'tool-body');
+    body.append(
+      toolEl(
+        'strong',
+        '',
+        `Quarantine: ${quarantine.quarantined} of ${quarantine.targets} recent join(s)${quarantine.failed ? ` · ${quarantine.failed} failed` : ''}`,
+      ),
+    );
+    if (quarantine.note) body.append(toolEl('div', 'muted small', quarantine.note));
+    summary.append(body);
+    list.append(summary);
+  }
   for (const entry of [...(panic.timeline ?? [])].reverse()) {
     list.append(toolEl('div', 'tool-item', `${new Date(entry.at).toLocaleTimeString()} — ${entry.text}`));
   }

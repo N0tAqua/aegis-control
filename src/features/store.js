@@ -61,6 +61,7 @@ export function createGuildState() {
       verification: null,
       quarantineRoleId: null,
       quarantined: [],
+      quarantineReport: null,
       joinWindowMs: 3_600_000,
     },
     guard: { enabled: false, threshold: 3, windowMs: 60_000, channelId: null, trustedRoles: [], incidents: [], lastBreachAt: {} },

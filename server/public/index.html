@@ -1673,9 +1673,16 @@
         els('panic-state').classList.toggle('danger', Boolean(panic.active));
         els('panic-window').value = Math.round((panic.joinWindowMs || 3600000) / 60000);
         const timeline = [...(panic.timeline || [])].reverse();
-        els('panic-timeline').innerHTML = timeline.length
-          ? timeline.map((entry) => `<div class="tool-row">${escapeHtml(new Date(entry.at).toLocaleTimeString())} — ${escapeHtml(entry.text)}</div>`).join('')
-          : '<div class="tool-row">No changes recorded.</div>';
+        const report = panic.quarantineReport;
+        els('panic-timeline').innerHTML =
+          (report?.targets !== undefined
+            ? `<div class="tool-row ${report.incomplete || report.failed ? 'danger' : ''}"><span>Quarantine: ${report.quarantined} of ${report.targets} recent join(s)${
+                report.failed ? ` · ${report.failed} failed` : ''
+              }</span>${report.note ? `<span class="hint">${escapeHtml(report.note)}</span>` : ''}</div>`
+            : '') +
+          (timeline.length
+            ? timeline.map((entry) => `<div class="tool-row">${escapeHtml(new Date(entry.at).toLocaleTimeString())} — ${escapeHtml(entry.text)}</div>`).join('')
+            : '<div class="tool-row">No changes recorded.</div>');
 
         const guard = features.guard || {};
         els('guard-enabled').checked = Boolean(guard.enabled);

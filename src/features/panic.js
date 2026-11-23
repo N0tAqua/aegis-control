@@ -15,6 +15,7 @@ export function panicState(features, guildId) {
     verification: null,
     quarantineRoleId: null,
     quarantined: [],
+    quarantineReport: null,
     joinWindowMs: 3_600_000,
   };
   return config.panic;
@@ -36,6 +37,7 @@ export function panicSummary(features, guildId) {
     channels: record.channels?.length ?? 0,
     quarantined: record.quarantined?.length ?? 0,
     quarantineRoleId: record.quarantineRoleId ?? null,
+    quarantineReport: record.quarantineReport ?? null,
     failed: record.failed ?? [],
     timeline: (record.timeline ?? []).slice(-10),
     duration: record.active && record.startedAt ? Date.now() - record.startedAt : null,
@@ -140,18 +142,8 @@ export async function activatePanic(features, guild, { by = 'dashboard', reason 
   }
 
   if (record.quarantineRoleId) {
-    const cutoff = Date.now() - record.joinWindowMs;
-    for (const member of guild.members.cache.values()) {
-      if (member.user?.bot || member.id === guild.ownerId) continue;
-      if (!(member.joinedTimestamp >= cutoff)) continue;
-      if (member.permissions?.has(PermissionFlagsBits.Administrator)) continue;
-      const added = await member.roles
-        .add(record.quarantineRoleId, 'Aegis panic mode quarantine')
-        .then(() => true)
-        .catch(() => false);
-      if (added) record.quarantined.push(member.id);
-    }
-    note(record, `Quarantined ${record.quarantined.length} recent join(s).`);
+    await quarantineRecentJoins(guild, record);
+    features.store.save();
   }
 
   features.store.save();
@@ -185,11 +177,22 @@ export async function deactivatePanic(features, guild, { by = 'dashboard' } = {}
     });
   }
 
+  let lifted = 0;
+  let liftFailed = 0;
   for (const userId of record.quarantined ?? []) {
     const member = guild.members.cache.get(userId) ?? (await guild.members.fetch(userId).catch(() => null));
     if (!member) continue;
-    await member.roles.remove(record.quarantineRoleId, 'Aegis panic mode ended').catch(() => {});
+    const done = await member.roles
+      .remove(record.quarantineRoleId, 'Aegis panic mode ended')
+      .then(() => true)
+      .catch(() => false);
+    if (done) lifted += 1;
+    else {
+      liftFailed += 1;
+      if (liftFailed <= 3) record.failed.push(`Could not lift quarantine from ${member.user?.tag ?? userId}.`);
+    }
   }
+  if (record.quarantined?.length) note(record, `Lifted quarantine from ${lifted} member(s)${liftFailed ? `, ${liftFailed} failed` : ''}.`);
 
   record.active = false;
   record.endedAt = Date.now();
@@ -200,6 +203,79 @@ export async function deactivatePanic(features, guild, { by = 'dashboard' } = {}
   features.store.save();
   await announce(features, guild, record, false);
   return { already: false, restored, ...panicSummary(features, guild.id) };
+}
+
+/**
+ * Recent joins are found through a full member fetch, not the gateway cache:
+ * with the Server Members intent disabled (or a huge guild) the cache only
+ * holds a handful of members, which used to skip people without a trace.
+ * Anything that still cannot be covered is written into the panic report.
+ */
+async function quarantineRecentJoins(guild, record) {
+  const report = { at: Date.now(), targets: 0, quarantined: 0, failed: 0, already: 0, incomplete: false, note: null };
+  record.quarantineReport = report;
+  const role = guild.roles.cache.get(record.quarantineRoleId);
+
+  if (!role) {
+    report.note = 'The quarantine role no longer exists, so nobody was quarantined.';
+    record.failed.push(report.note);
+    return report;
+  }
+  if (role.editable === false) {
+    report.note = `The quarantine role "${role.name}" sits above Aegis, so it could not be given out.`;
+    record.failed.push(report.note);
+    return report;
+  }
+
+  let members = guild.members.cache;
+  try {
+    members = await guild.members.fetch({ limit: 0, time: 20_000 });
+  } catch (error) {
+    report.incomplete = true;
+    report.note = `Could not read the full member list (${error.message}). Only the ${members.size} cached member(s) were checked — enable the Server Members intent for full coverage.`;
+    record.failed.push(report.note);
+  }
+  if (!report.incomplete && members.size < Math.max(0, Number(guild.memberCount) - 1)) {
+    report.incomplete = true;
+    report.note = `Only ${members.size} of ${guild.memberCount} members were available, so some recent joins may not be quarantined.`;
+    record.failed.push(report.note);
+  }
+
+  const cutoff = Date.now() - record.joinWindowMs;
+  const targets = [...members.values()].filter((member) => {
+    if (!member || member.user?.bot || member.id === guild.ownerId) return false;
+    if (!(member.joinedTimestamp >= cutoff)) return false;
+    if (member.permissions?.has(PermissionFlagsBits.Administrator)) return false;
+    return true;
+  });
+  report.targets = targets.length;
+
+  for (const member of targets) {
+    if (member.roles?.cache?.has?.(role.id)) {
+      report.already += 1;
+      if (!record.quarantined.includes(member.id)) record.quarantined.push(member.id);
+      continue;
+    }
+    const added = await member.roles
+      .add(role, 'Aegis panic mode quarantine')
+      .then(() => true)
+      .catch((error) => {
+        report.failed += 1;
+        if (report.failed <= 3) record.failed.push(`Could not quarantine ${member.user?.tag ?? member.id}: ${error.message}`);
+        return false;
+      });
+    if (added) {
+      report.quarantined += 1;
+      record.quarantined.push(member.id);
+    }
+  }
+
+  note(
+    record,
+    `Quarantined ${report.quarantined} of ${report.targets} recent join(s)${report.already ? ` (${report.already} already had the role)` : ''}${
+      report.failed ? `, ${report.failed} failed` : ''}${report.incomplete ? ' — member list was incomplete' : ''}.`,
+  );
+  return report;
 }
 
 export async function quarantineNewMember(features, member) {
@@ -292,6 +368,11 @@ export const commands = [
                     ? `Last used ${formatDuration(Date.now() - summary.endedAt)} ago.`
                     : 'Use `/panic on` if the server is being raided.',
                 summary.quarantined ? `Quarantined members: **${summary.quarantined}**` : '',
+                summary.quarantineReport?.targets
+                  ? `Quarantine coverage: ${summary.quarantineReport.quarantined}/${summary.quarantineReport.targets}${
+                      summary.quarantineReport.incomplete ? ' (member list incomplete)' : ''
+                    }`
+                  : '',
                 summary.failed.length ? `\n⚠️ ${summary.failed.length} step(s) failed last time.` : '',
               ]
                 .filter(Boolean)
@@ -319,7 +400,15 @@ export const commands = [
             embeds: [
               embed(
                 result.already ? 'Already locked' : '🚨 Panic mode active',
-                `Locked **${result.channels}** channel(s). Use \`/panic off\` when it is safe.`,
+                [
+                  `Locked **${result.channels}** channel(s). Use \`/panic off\` when it is safe.`,
+                  result.quarantineReport?.targets
+                    ? `Quarantined **${result.quarantineReport.quarantined}** of ${result.quarantineReport.targets} recent join(s).`
+                    : '',
+                  result.quarantineReport?.note ? `⚠️ ${result.quarantineReport.note}` : '',
+                ]
+                  .filter(Boolean)
+                  .join('\n'),
                 COLORS.urgent,
               ),
             ],
